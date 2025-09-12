@@ -3,7 +3,7 @@
 	
 	 {{range .Habits}}
 	    <div>
-		<h2>{{.Version.Name}}</h2>
+		<h2><a href="/habits/{{.Habit.ID}}">{{.Version.Name}}</a></h2>
 		
 		<!-- Habit Basic Info -->
 		<h3>Habit Details</h3>

@@ -1,0 +1,10 @@
+{{ define "content" }}
+<h1>Habit Detail Page</h1>
+Name: {{ .Version.Name }}
+Description: {{ .Version.Description }} 
+
+{{ range .Metrics }}
+	Name: {{ .Version.Name }} 
+{{ end }}
+
+{{ end }}

@@ -5,7 +5,14 @@
 <head><title>{{ block "title" . }}Home{{ end }}</title></head>
 
 <body>
+	<header>
+		<nav>
+			<li><a href="/">Home</a></li>
+		</nav>
+	</header>
+
 	{{ template "content" . }}
+
 	<footer>Generated at {{ time }}</footer>
 </body>
 
