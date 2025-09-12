@@ -1,0 +1,85 @@
+{{ define "content" }}
+	<h2>This is the home page.</h2>
+	
+	 {{range .Habits}}
+	    <div>
+		<h2>{{.Version.Name}}</h2>
+		
+		<!-- Habit Basic Info -->
+		<h3>Habit Details</h3>
+		<ul>
+		    <li><strong>ID:</strong> {{.Habit.ID}}</li>
+		    <li><strong>Slug:</strong> {{.Habit.Slug}}</li>
+		    <li><strong>User ID:</strong> {{.Habit.UserID}}</li>
+		    <li><strong>Archived:</strong> {{.Habit.IsArchived}}</li>
+		    <li><strong>Created:</strong> {{.Habit.CreatedAt.Format "2006-01-02 15:04:05"}}</li>
+		</ul>
+		
+		<!-- Version Info -->
+		<h3>Version Information</h3>
+		<ul>
+		    <li><strong>Version ID:</strong> {{.Version.ID}}</li>
+		    <li><strong>Version Number:</strong> {{.Version.Version}}</li>
+		    <li><strong>Name:</strong> {{.Version.Name}}</li>
+		    {{if .Version.Description}}<li><strong>Description:</strong> {{.Version.Description}}</li>{{end}}
+		    {{if .Version.Category}}<li><strong>Category:</strong> {{.Version.Category}}</li>{{end}}
+		    <li><strong>Polarity:</strong> {{.Version.Polarity}}</li>
+		    {{if .Version.ScheduleRrule}}<li><strong>Schedule:</strong> {{.Version.ScheduleRrule}}</li>{{end}}
+		    <li><strong>Active From:</strong> {{.Version.ActiveFrom.Format "2006-01-02 15:04:05"}}</li>
+		    {{if .Version.ActiveTo}}<li><strong>Active To:</strong> {{.Version.ActiveTo.Format "2006-01-02 15:04:05"}}</li>{{end}}
+		</ul>
+		
+		<!-- Metrics -->
+		<h3>Metrics</h3>
+		{{if .Metrics}}
+		    {{range .Metrics}}
+		    <div>
+			<h4>{{.Version.Name}} ({{.Metric.Slug}})</h4>
+			<ul>
+			    <li><strong>Metric ID:</strong> {{.Metric.ID}}</li>
+			    <li><strong>Kind:</strong> {{.Version.MetricKind}}</li>
+			    <li><strong>Required:</strong> {{.Version.IsRequired}}</li>
+			    <li><strong>Aggregation:</strong> {{.Version.AggKindDefault}}</li>
+			    {{if .Version.Polarity}}<li><strong>Polarity:</strong> {{.Version.Polarity}}</li>{{end}}
+			    {{if .Version.MinValue}}<li><strong>Min Value:</strong> {{.Version.MinValue}}</li>{{end}}
+			    {{if .Version.MaxValue}}<li><strong>Max Value:</strong> {{.Version.MaxValue}}</li>{{end}}
+			    {{if .Unit}}
+				<li><strong>Unit:</strong> {{.Unit.Code}} ({{.Unit.QuantityKind}})</li>
+			    {{end}}
+			    <li><strong>Created:</strong> {{.Metric.CreatedAt.Format "2006-01-02 15:04:05"}}</li>
+			</ul>
+		    </div>
+		    {{end}}
+		{{else}}
+		    <p>No metrics defined for this habit.</p>
+		{{end}}
+		
+		<!-- Targets -->
+		<h3>Targets</h3>
+		{{if .Targets}}
+		    {{range .Targets}}
+		    <div>
+			<ul>
+			    <li><strong>Target ID:</strong> {{.ID}}</li>
+			    <li><strong>Period:</strong> {{.Period}}</li>
+			    <li><strong>Aggregation:</strong> {{.AggKind}}</li>
+			    {{if .TargetValue}}<li><strong>Target Value:</strong> {{.TargetValue}}</li>{{end}}
+			    {{if .TargetBool}}<li><strong>Target Bool:</strong> {{.TargetBool}}</li>{{end}}
+			    {{if .MetricID}}<li><strong>Metric ID:</strong> {{.MetricID}}</li>{{end}}
+			    <li><strong>Active From:</strong> {{.ActiveFrom.Format "2006-01-02 15:04:05"}}</li>
+			    {{if .ActiveTo}}<li><strong>Active To:</strong> {{.ActiveTo.Format "2006-01-02 15:04:05"}}</li>{{end}}
+			</ul>
+		    </div>
+		    {{end}}
+		{{else}}
+		    <p>No targets defined for this habit.</p>
+		{{end}}
+		
+		<hr>
+	    </div>
+	    {{end}}
+	    
+	    {{if not .}}
+	    <p>No habits found.</p>
+	    {{end}}
+{{ end }}
