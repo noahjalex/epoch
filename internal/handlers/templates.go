@@ -89,3 +89,23 @@ func (r *Renderer) Render(w http.ResponseWriter, name string, data any) {
 		return
 	}
 }
+
+func (r *Renderer) RenderPartial(w http.ResponseWriter, name string, data any) {
+	tmpl, ok := r.cache[name]
+	if !ok {
+		http.Error(w, "partial not found: "+name, http.StatusNotFound)
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		http.Error(w, "partial template execution error", http.StatusInternalServerError)
+		log.Printf("execute %q: %v", name, err)
+		return
+	}
+
+	if _, err := buf.WriteTo(w); err != nil {
+		log.Printf("writing response for %q: %v", name, err)
+		return
+	}
+}
