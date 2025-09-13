@@ -1,10 +1,60 @@
+{{/*
 {{ define "content" }}
 <h1>Habit Detail Page</h1>
-Name: {{ .Version.Name }}
-Description: {{ .Version.Description }} 
 
-{{ range .Metrics }}
-	Name: {{ .Version.Name }} 
+<h1>Name: {{ .Habit.Name }}</h1>
+
+<h2>Logs</h2>
+<table class="border-collapse">
+	<tr>
+		<th>Date</th>
+		<th>Quantity</th>
+		<th>Note</th>
+	</tr>
+	{{ range .Logs }}
+	<tr>
+	<td>{{ .OccurredAt }}</td>
+	<td>{{ .Quantity }}</td>
+	<td>{{ .Note }}</td>
+	</tr>
+	{{ end }}
+</table>
 {{ end }}
+*/}}
+{{ define "content" }}
+<div class="max-w-4xl mx-auto p-6">
+  <!-- Page Title -->
+  <h1 class="text-3xl font-bold text-gray-800 mb-6">Habit Detail Page</h1>
 
+  <!-- Habit Name -->
+  <div class="mb-8">
+    <h2 class="text-xl font-semibold text-gray-700">Name:</h2>
+    <p class="text-lg text-gray-600">{{ .Habit.Name }}</p>
+  </div>
+
+  <!-- Logs Section -->
+  <div>
+    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Logs</h2>
+    <div class="overflow-x-auto">
+      <table class="min-w-full border border-gray-200 rounded-lg shadow-sm">
+        <thead class="bg-gray-100 border-b">
+          <tr>
+            <th class="px-4 py-2 text-left text-sm font-medium text-gray-600">Date</th>
+            <th class="px-4 py-2 text-left text-sm font-medium text-gray-600">Quantity</th>
+            <th class="px-4 py-2 text-left text-sm font-medium text-gray-600">Note</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          {{ range .Logs }}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2 text-sm text-gray-700">{{ humanDate .OccurredAt }}</td>
+            <td class="px-4 py-2 text-sm text-gray-700">{{ .Quantity }}</td>
+            <td class="px-4 py-2 text-sm text-gray-700">{{ .Note.Value }}</td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 {{ end }}

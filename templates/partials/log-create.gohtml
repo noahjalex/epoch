@@ -1,0 +1,73 @@
+{{ define "log-create" }}
+<div class="flex items-center justify-between">
+  <h2 class="text-lg font-bold">Create Log</h2>
+  <button onclick="closeModal()">
+    <span class="material-symbols-outlined">close</span>
+  </button>
+</div>
+
+<form 
+  hx-post="/api/logs" 
+  hx-target="#modal-content" 
+  hx-swap="innerHTML"
+  hx-on::after-request="if(event.detail.successful) closeModal()"
+>
+	<h2 class="text-lg font-semibold mb-3">New Log</h2>
+
+	<div class="space-y-6">
+
+	  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+	  <label class="block">
+	      <span class="block text-sm font-medium mb-1">Habit *</span>
+	      <select name="habit_id" required
+		      class="w-full rounded-md border border-gray-300 p-2 bg-white focus:ring focus:ring-blue-200">
+		{{/* Expect .Habits to be a slice with fields: ID, Name, UnitLabel (sql.NullString), PerLogDefaultQty (string/decimal) */}}
+		{{ $hID:=.SelectedHabit }}
+		{{range .Habits}}
+		  <option
+		    value="{{.ID}}"
+		    {{ if eq $hID .ID }}selected{{ end }}
+		    {{if .UnitLabel.Valid}}data-unit="{{.UnitLabel.String}}"{{end}}
+		    data-default-qty="{{.PerLogDefaultQty}}">
+		    {{.Name}}{{if .UnitLabel.Valid}} ({{.UnitLabel.String}}){{end}}
+		  </option>
+		{{end}}
+	      </select>
+	      <span class="text-xs text-gray-500">Choose the habit to log against.</span>
+	    </label>
+
+	<label class="block">
+		<span class="block text-sm font-medium mb-1">Occurred at *</span>
+		<input type="datetime-local" name="occurred_at" required
+		     value="{{ if .CurrentTime }}{{ .CurrentTime }}{{ else }}{{ currentDateTime }}{{ end }}"
+		     class="w-full rounded-md border border-gray-300 p-2 focus:ring focus:ring-blue-200">
+		<span class="text-xs text-gray-500">Defaults to now in your timezone; editable.</span>
+	</label>
+	  </div>
+
+	  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+	    <label class="block">
+	      <span class="block text-sm font-medium mb-1">Quantity *</span>
+	      <input type="number" step="0.01" min="0" name="quantity" required
+		     class="w-full rounded-md border border-gray-300 p-2 focus:outline-none focus:ring focus:ring-blue-200"
+		     placeholder="1.00">
+	      <span class="text-xs text-gray-500">Must be ≥ 0. Uses habit’s unit label if set.</span>
+	    </label>
+
+	    <label class="block md:col-span-1">
+	      <span class="block text-sm font-medium mb-1">Note (optional)</span>
+	      <input type="text" name="note"
+		     class="w-full rounded-md border border-gray-300 p-2 focus:outline-none focus:ring focus:ring-blue-200"
+		     placeholder="Any details to remember…">
+	    </label>
+	  </div>
+
+	</div>
+
+	<div class="flex items-center justify-between">
+	  <h2 class="text-lg font-bold">Create Log</h2>
+	  <button onclick="closeModal()">Cancel</button>
+	  <input type="submit">
+	</div>
+</form>
+{{ end }}

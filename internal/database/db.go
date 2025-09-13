@@ -1,21 +1,22 @@
 package database
 
 import (
-	"database/sql"
+	// "database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/noahjalex/epoch/internal/models"
 	"github.com/sirupsen/logrus"
 )
 
 type DB struct {
-	*sql.DB
+	*sqlx.DB
 }
 
-func SetupDB(log *logrus.Logger) (*DB, *models.Repository) {
+func SetupDB(log *logrus.Logger) (*DB, *models.Repo) {
 	// Database configuration
 	dbHost := getEnv("DB_HOST", "localhost")
 	dbPort := getEnv("DB_PORT", "5432")
@@ -54,7 +55,7 @@ func new(host, port, user, password, dbname string) (*DB, error) {
 	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		host, port, user, password, dbname)
 
-	db, err := sql.Open("postgres", psqlInfo)
+	db, err := sqlx.Open("postgres", psqlInfo)
 	if err != nil {
 		return nil, err
 	}

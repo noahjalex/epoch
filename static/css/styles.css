@@ -1,0 +1,259 @@
+:root {
+	--bg: #0f1220;
+	--panel: #161a2b;
+	--muted: #8b93a7;
+	--text: #e7ecf5;
+	--accent: #6ee7ff;
+	--accent-2: #a78bfa;
+	--danger: #ff6b6b;
+	--ok: #22c55e;
+	--shadow: 0 10px 30px rgba(0, 0, 0, .35);
+	--radius: 18px;
+	--screen-size: 2560px;
+}
+
+* {
+	box-sizing: border-box
+}
+
+html,
+body {
+	height: 100%
+}
+
+body {
+	margin: 0;
+	font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+	background: radial-gradient(var(--screen-size) 800px at 80% -10%, #1b2140 0%, transparent 60%), var(--bg);
+	color: var(--text);
+}
+
+header {
+	position: sticky;
+	top: 0;
+	z-index: 5;
+	backdrop-filter: saturate(140%) blur(8px);
+	background: linear-gradient(180deg, rgba(22, 26, 43, .9), rgba(22, 26, 43, .6));
+	border-bottom: 1px solid rgba(255, 255, 255, .06);
+	box-shadow: var(--shadow);
+}
+
+.wrap {
+	max-width: var(--screen-size);
+	margin: 0 auto;
+	padding: 16px;
+}
+
+.bar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.bar h1 {
+	font-size: 22px;
+	margin: 0;
+	letter-spacing: .4px
+}
+
+.spacer {
+	flex: 1
+}
+
+button,
+.btn {
+	appearance: none;
+	border: 0;
+	padding: 10px 14px;
+	border-radius: 12px;
+	color: #0c1222;
+	background: var(--accent);
+	font-weight: 600;
+	cursor: pointer;
+	box-shadow: var(--shadow);
+	transition: transform .05s ease, filter .2s ease;
+}
+
+button.secondary {
+	background: #2a304a;
+	color: var(--text);
+	border: 1px solid rgba(255, 255, 255, .08)
+}
+
+button.ghost {
+	background: transparent;
+	border: 1px solid rgba(255, 255, 255, .14);
+	color: var(--text)
+}
+
+button.danger {
+	background: var(--danger);
+	color: white
+}
+
+button:active {
+	transform: translateY(1px);
+}
+
+.grid {
+	display: grid;
+	grid-template-columns: 320px 1fr;
+	gap: 16px;
+	padding: 16px;
+	max-width: var(--screen-size);
+	margin: 10px auto;
+}
+
+.card {
+	background: linear-gradient(180deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, .02));
+	border: 1px solid rgba(255, 255, 255, .06);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow);
+}
+
+.card .pad {
+	padding: 16px
+}
+
+.muted {
+	color: var(--muted)
+}
+
+.list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.habit {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	padding: 10px;
+	border-radius: 12px;
+	border: 1px solid rgba(255, 255, 255, .06);
+	cursor: pointer;
+	background: rgba(255, 255, 255, .02)
+}
+
+.habit:hover {
+	background: rgba(255, 255, 255, .04)
+}
+
+.habit.active {
+	outline: 2px solid var(--accent);
+	background: rgba(110, 231, 255, .08)
+}
+
+.habit .title {
+	font-weight: 700
+}
+
+.habit small {
+	color: var(--muted)
+}
+
+.progress {
+	width: 100%;
+	height: 8px;
+	border-radius: 999px;
+	background: #232842;
+	position: relative;
+	overflow: hidden
+}
+
+.progress>i {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 0%;
+	background: linear-gradient(90deg, var(--accent), var(--accent-2))
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap
+}
+
+.row>* {
+	flex: 1 1 auto
+}
+
+label {
+	display: block;
+	font-size: 12px;
+	color: var(--muted);
+	margin-bottom: 6px
+}
+
+input,
+select {
+	width: 100%;
+	padding: 10px 12px;
+	border-radius: 10px;
+	background: #0f1220;
+	border: 1px solid rgba(255, 255, 255, .12);
+	color: var(--text)
+}
+
+table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+th,
+td {
+	text-align: left;
+	padding: 10px;
+	border-bottom: 1px solid rgba(255, 255, 255, .08)
+}
+
+th {
+	color: var(--muted);
+	font-weight: 600;
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: .5px
+}
+
+.charts {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 16px
+}
+
+canvas {
+	width: 100%;
+	height: 280px;
+	background: #0f1220;
+	border: 1px solid rgba(255, 255, 255, .06);
+	border-radius: 14px
+}
+
+.empty {
+	text-align: center;
+	padding: 24px;
+	color: var(--muted)
+}
+
+dialog {
+	border: 0;
+	border-radius: 18px;
+	background: var(--panel);
+	color: var(--text);
+	box-shadow: var(--shadow);
+	width: min(560px, 92vw)
+}
+
+dialog::backdrop {
+	background: rgba(0, 0, 0, .6)
+}
+
+@media (max-width: 920px) {
+	.grid {
+		grid-template-columns: 1fr
+	}
+}
