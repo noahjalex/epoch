@@ -20,8 +20,22 @@ type Renderer struct {
 func NewRenderer() (*Renderer, error) {
 
 	funcs := template.FuncMap{
-		"time": func() string {
-			return time.Now().Format("2006-01-02 15:04:05")
+		"currentDateTime": func() string {
+			// Default to local timezone - this will be improved when we have user context
+			return time.Now().Format("2006-01-02T15:04")
+		},
+		"currentDateTimeInTZ": func(tzName string) string {
+			loc, err := time.LoadLocation(tzName)
+			if err != nil {
+				loc = time.Local // fallback
+			}
+			return time.Now().In(loc).Format("2006-01-02T15:04")
+		},
+		"humanDate": func(t time.Time) string {
+			return t.Format("Jan 1, 2006 at 3:04pm")
+		},
+		"ISODate": func(t time.Time) string {
+			return t.Format("2006-01-02T15:04:05")
 		},
 		"toJSON": func(data any) string {
 			jd, _ := json.MarshalIndent(data, "", "  ")
@@ -34,14 +48,22 @@ func NewRenderer() (*Renderer, error) {
 		log.Fatalf("parse base err %v", err)
 	}
 
-	if partials, _ := filepath.Glob("templates/partials/*.gohtml"); len(partials) > 0 {
-		if _, err := base.ParseFiles(partials...); err != nil {
-			return nil, err
-		}
-	}
-
 	cache := make(TemplateCache)
 
+	// Partials: standalone templates that still have the same FuncMap
+	partials, err := filepath.Glob("templates/partials/*.gohtml")
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range partials {
+		key := strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))
+		t := template.New(key).Funcs(funcs)
+		if _, err := t.ParseFiles(p); err != nil {
+			return nil, err
+		}
+		cache[key] = t
+	}
+	// Full pages
 	pageFiles, err := filepath.Glob("templates/pages/*.gohtml")
 	if err != nil {
 		return nil, err
@@ -98,7 +120,7 @@ func (r *Renderer) RenderPartial(w http.ResponseWriter, name string, data any) {
 	}
 
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
+	if err := tmpl.ExecuteTemplate(&buf, name, data); err != nil {
 		http.Error(w, "partial template execution error", http.StatusInternalServerError)
 		log.Printf("execute %q: %v", name, err)
 		return

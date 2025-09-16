@@ -1,85 +1,132 @@
 {{ define "content" }}
 	<h2>This is the home page.</h2>
+
+	<div id="modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+	  <div 
+	    id="modal-content" 
+	    class="bg-white rounded-lg shadow-lg w-full max-w-2xl p-6 relative 
+		   max-h-[90vh] overflow-y-auto"
+	  >
+	    <!-- htmx will replace this content with the form partial -->
+	  </div>
+	</div>
+	 
+
+	 {{if not .}}
+	      <div class="rounded-xl border border-dashed p-10 text-center text-gray-500">
+		No habits yet. <a href="/habits/new" class="text-blue-600 hover:underline">Create your first habit</a>.
+	      </div>
+    {{else}}
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {{range .}}
+          <div class="rounded-2xl border bg-white p-5 shadow-sm">
+            <div class="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h2 class="text-lg font-semibold">{{.Name}}</h2>
+                <p class="mt-1 text-sm text-gray-500">
+                  Created {{.CreatedAt.Format "Jan 2, 2006"}}
+                </p>
+              </div>
+              <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium
+                {{if .IsActive}}bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200{{else}}bg-gray-100 text-gray-600 ring-1 ring-gray-200{{end}}">
+                {{if .IsActive}}Active{{else}}Archived{{end}}
+              </span>
+            </div>
+
+            <div class="space-y-2 text-sm">
+              <!-- Target line -->
+              <div class="flex items-start gap-2">
+                <span class="mt-0.5 inline-block h-2 w-2 rounded-full bg-blue-500"></span>
+                <div>
+                  <div class="text-gray-700">
+                    Target:
+                    <span class="font-medium">{{.TargetPerPeriod}}</span>
+                    {{if .UnitLabel.Valid}}{{.UnitLabel.String}}{{end}}
+                    {{/* period phrase */}}
+                    {{if eq .Period "daily"}}per day{{end}}
+                    {{if eq .Period "weekly"}}per week{{end}}
+                    {{if eq .Period "monthly"}}per month{{end}}
+                    {{if eq .Period "rolling"}}
+                      over {{if .RollingLenDays.Valid}}{{.RollingLenDays.Int32}}{{else}}?{{end}} days
+                    {{end}}
+                  </div>
+                  <div class="text-gray-500">
+                    Aggregation: <span class="font-medium">{{.Agg}}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Defaults & config -->
+              <div class="flex items-start gap-2">
+                <span class="mt-0.5 inline-block h-2 w-2 rounded-full bg-indigo-500"></span>
+                <div class="text-gray-700">
+                  Per-log default:
+                  <span class="font-medium">{{.PerLogDefaultQty}}</span>
+                  {{if .UnitLabel.Valid}}{{.UnitLabel.String}}{{end}}
+                </div>
+              </div>
+
+              <div class="flex items-start gap-2">
+                <span class="mt-0.5 inline-block h-2 w-2 rounded-full bg-gray-400"></span>
+                <div class="text-gray-700">
+                  Period settings:
+                  {{if eq .Period "weekly"}}
+                    week starts DOW=<span class="font-mono">{{.WeekStartDOW}}</span>
+                  {{else if eq .Period "monthly"}}
+                    month anchor day=<span class="font-mono">{{.MonthAnchorDay}}</span>
+                  {{else if eq .Period "rolling"}}
+                    length=<span class="font-mono">{{if .RollingLenDays.Valid}}{{.RollingLenDays.Int32}}{{else}}?{{end}}</span> days,
+                    anchor=<span class="font-mono">{{.AnchorDate.Format "2006-01-02"}}</span>
+                  {{else}}
+                    calendar-aligned day
+                  {{end}}
+                </div>
+              </div>
+
+              {{if .TZOverride.Valid}}
+              <div class="flex items-start gap-2">
+                <span class="mt-0.5 inline-block h-2 w-2 rounded-full bg-amber-500"></span>
+                <div class="text-gray-700">
+                  Timezone override: <span class="font-mono">{{.TZOverride.String}}</span>
+                </div>
+              </div>
+              {{end}}
+            </div>
+
+            <!-- Actions -->
+            <div class="mt-5 flex flex-wrap items-center gap-2">
+		<button
+		  hx-get="/logs/new"
+		  hx-target="#modal-content"
+		  hx-vals='{"habit_id":"{{.ID}}"}'
+		  hx-trigger="click"
+		  hx-on::after-request="openModal()"
+		  class="rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">
+		  Add Log
+		</button>
+              <a href="/habits/{{.ID}}" class="rounded-xl border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                View
+              </a>
+              <a href="/habits/{{.ID}}/edit" class="rounded-xl border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                Edit
+              </a>
+              {{if .IsActive}}
+                <form action="/habits/{{.ID}}/deactivate" method="post" class="ml-auto">
+                  <button class="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100">
+                    Deactivate
+                  </button>
+                </form>
+              {{else}}
+                <form action="/habits/{{.ID}}/activate" method="post" class="ml-auto">
+                  <button class="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100">
+                    Activate
+                  </button>
+                </form>
+              {{end}}
+            </div>
+          </div>
+        {{end}}
+      </div>
+    {{end}}
 	
-	 {{range .Habits}}
-	    <div>
-		<h2><a href="/habits/{{.Habit.ID}}">{{.Version.Name}}</a></h2>
-		
-		<!-- Habit Basic Info -->
-		<h3>Habit Details</h3>
-		<ul>
-		    <li><strong>ID:</strong> {{.Habit.ID}}</li>
-		    <li><strong>Slug:</strong> {{.Habit.Slug}}</li>
-		    <li><strong>User ID:</strong> {{.Habit.UserID}}</li>
-		    <li><strong>Archived:</strong> {{.Habit.IsArchived}}</li>
-		    <li><strong>Created:</strong> {{.Habit.CreatedAt.Format "2006-01-02 15:04:05"}}</li>
-		</ul>
-		
-		<!-- Version Info -->
-		<h3>Version Information</h3>
-		<ul>
-		    <li><strong>Version ID:</strong> {{.Version.ID}}</li>
-		    <li><strong>Version Number:</strong> {{.Version.Version}}</li>
-		    <li><strong>Name:</strong> {{.Version.Name}}</li>
-		    {{if .Version.Description}}<li><strong>Description:</strong> {{.Version.Description}}</li>{{end}}
-		    {{if .Version.Category}}<li><strong>Category:</strong> {{.Version.Category}}</li>{{end}}
-		    <li><strong>Polarity:</strong> {{.Version.Polarity}}</li>
-		    {{if .Version.ScheduleRrule}}<li><strong>Schedule:</strong> {{.Version.ScheduleRrule}}</li>{{end}}
-		    <li><strong>Active From:</strong> {{.Version.ActiveFrom.Format "2006-01-02 15:04:05"}}</li>
-		    {{if .Version.ActiveTo}}<li><strong>Active To:</strong> {{.Version.ActiveTo.Format "2006-01-02 15:04:05"}}</li>{{end}}
-		</ul>
-		
-		<!-- Metrics -->
-		<h3>Metrics</h3>
-		{{if .Metrics}}
-		    {{range .Metrics}}
-		    <div>
-			<h4>{{.Version.Name}} ({{.Metric.Slug}})</h4>
-			<ul>
-			    <li><strong>Metric ID:</strong> {{.Metric.ID}}</li>
-			    <li><strong>Kind:</strong> {{.Version.MetricKind}}</li>
-			    <li><strong>Required:</strong> {{.Version.IsRequired}}</li>
-			    <li><strong>Aggregation:</strong> {{.Version.AggKindDefault}}</li>
-			    {{if .Version.Polarity}}<li><strong>Polarity:</strong> {{.Version.Polarity}}</li>{{end}}
-			    {{if .Version.MinValue}}<li><strong>Min Value:</strong> {{.Version.MinValue}}</li>{{end}}
-			    {{if .Version.MaxValue}}<li><strong>Max Value:</strong> {{.Version.MaxValue}}</li>{{end}}
-			    {{if .Unit}}
-				<li><strong>Unit:</strong> {{.Unit.Code}} ({{.Unit.QuantityKind}})</li>
-			    {{end}}
-			    <li><strong>Created:</strong> {{.Metric.CreatedAt.Format "2006-01-02 15:04:05"}}</li>
-			</ul>
-		    </div>
-		    {{end}}
-		{{else}}
-		    <p>No metrics defined for this habit.</p>
-		{{end}}
-		
-		<!-- Targets -->
-		<h3>Targets</h3>
-		{{if .Targets}}
-		    {{range .Targets}}
-		    <div>
-			<ul>
-			    <li><strong>Target ID:</strong> {{.ID}}</li>
-			    <li><strong>Period:</strong> {{.Period}}</li>
-			    <li><strong>Aggregation:</strong> {{.AggKind}}</li>
-			    {{if .TargetValue}}<li><strong>Target Value:</strong> {{.TargetValue}}</li>{{end}}
-			    {{if .TargetBool}}<li><strong>Target Bool:</strong> {{.TargetBool}}</li>{{end}}
-			    {{if .MetricID}}<li><strong>Metric ID:</strong> {{.MetricID}}</li>{{end}}
-			    <li><strong>Active From:</strong> {{.ActiveFrom.Format "2006-01-02 15:04:05"}}</li>
-			    {{if .ActiveTo}}<li><strong>Active To:</strong> {{.ActiveTo.Format "2006-01-02 15:04:05"}}</li>{{end}}
-			</ul>
-		    </div>
-		    {{end}}
-		{{else}}
-		    <p>No targets defined for this habit.</p>
-		{{end}}
-		
-		<hr>
-	    </div>
-	    {{end}}
-	    
-	    {{if not .}}
-	    <p>No habits found.</p>
-	    {{end}}
 {{ end }}

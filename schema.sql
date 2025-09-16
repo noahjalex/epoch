@@ -1,290 +1,159 @@
--- Initial schema for habit tracker
--- Based on the provided relational schema
+-- dev_schema.sql
+\set ON_ERROR_STOP on
+\echo '==> Starting dev schema reset and seed...'
 
--- Enable citext extension for case-insensitive text
+BEGIN;
+
+-- Extensions
 CREATE EXTENSION IF NOT EXISTS citext;
 
--- Users table
-CREATE TABLE IF NOT EXISTS users (
-  id               BIGSERIAL PRIMARY KEY,
-  email            CITEXT UNIQUE NOT NULL,
-  tz               TEXT NOT NULL DEFAULT 'UTC',
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- =========================
+-- Drops (in dependency order)
+-- =========================
+DROP TABLE IF EXISTS habit_log CASCADE;
+DROP TABLE IF EXISTS habit CASCADE;
+DROP TABLE IF EXISTS app_user CASCADE;
 
--- Habits table (identity)
-CREATE TABLE IF NOT EXISTS habits (
-  id               BIGSERIAL PRIMARY KEY,
-  user_id          BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  slug             TEXT NOT NULL,
-  is_archived      BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (user_id, slug)
-);
-
--- Habit versions (versioned definitions)
-CREATE TABLE IF NOT EXISTS habit_versions (
-  id               BIGSERIAL PRIMARY KEY,
-  habit_id         BIGINT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
-  version          INT NOT NULL,
-  name             TEXT NOT NULL,
-  description      TEXT,
-  category         TEXT,
-  polarity         TEXT NOT NULL DEFAULT 'positive',
-  schedule_rrule   TEXT,
-  daily_expect_json JSONB,
-  active_from      TIMESTAMPTZ NOT NULL,
-  active_to        TIMESTAMPTZ,
-  CONSTRAINT habit_versions_unique UNIQUE (habit_id, version)
-);
-
--- Units for measurements
-CREATE TABLE IF NOT EXISTS units (
-  id               BIGSERIAL PRIMARY KEY,
-  code             TEXT UNIQUE NOT NULL,
-  quantity_kind    TEXT NOT NULL,
-  to_base_factor   NUMERIC NOT NULL,
-  base_unit_code   TEXT NOT NULL
-);
-
--- Habit metrics (identity)
-CREATE TABLE IF NOT EXISTS habit_metrics (
-  id               BIGSERIAL PRIMARY KEY,
-  habit_id         BIGINT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
-  slug             TEXT NOT NULL,
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (habit_id, slug)
-);
-
--- Habit metric versions (versioned metric definitions)
-CREATE TABLE IF NOT EXISTS habit_metric_versions (
-  id               BIGSERIAL PRIMARY KEY,
-  metric_id        BIGINT NOT NULL REFERENCES habit_metrics(id) ON DELETE CASCADE,
-  version          INT NOT NULL,
-  name             TEXT NOT NULL,
-  metric_kind      TEXT NOT NULL,
-  unit_id          BIGINT REFERENCES units(id),
-  polarity         TEXT,
-  agg_kind_default TEXT NOT NULL,
-  min_value        NUMERIC,
-  max_value        NUMERIC,
-  is_required      BOOLEAN NOT NULL DEFAULT FALSE,
-  active_from      TIMESTAMPTZ NOT NULL,
-  active_to        TIMESTAMPTZ,
-  metadata         JSONB NOT NULL DEFAULT '{}',
-  CONSTRAINT metric_versions_unique UNIQUE (metric_id, version)
-);
-
--- Habit logs (append-only events)
-CREATE TABLE IF NOT EXISTS habit_logs (
-  id                 BIGSERIAL PRIMARY KEY,
-  habit_id           BIGINT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
-  habit_version_id   BIGINT NOT NULL REFERENCES habit_versions(id),
-  occurred_at        TIMESTAMPTZ NOT NULL,
-  local_day          DATE NOT NULL,
-  tz                 TEXT NOT NULL,
-  note               TEXT,
-  supersedes_log_id  BIGINT REFERENCES habit_logs(id),
-  source             TEXT,
-  idempotency_key    TEXT,
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (habit_id, idempotency_key)
-);
-
--- Habit log values (metric values for each log)
-CREATE TABLE IF NOT EXISTS habit_log_values (
-  id                 BIGSERIAL PRIMARY KEY,
-  log_id             BIGINT NOT NULL REFERENCES habit_logs(id) ON DELETE CASCADE,
-  metric_id          BIGINT NOT NULL REFERENCES habit_metrics(id),
-  metric_version_id  BIGINT NOT NULL REFERENCES habit_metric_versions(id),
-  value_bool         BOOLEAN,
-  value_num          NUMERIC,
-  metadata           JSONB NOT NULL DEFAULT '{}',
-  -- Ensure exactly one value type is set
-  CHECK ((value_bool IS NOT NULL)::INT + (value_num IS NOT NULL)::INT = 1)
-);
-
--- Habit targets/goals
-CREATE TABLE IF NOT EXISTS habit_targets (
-  id                 BIGSERIAL PRIMARY KEY,
-  habit_id           BIGINT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
-  metric_id          BIGINT REFERENCES habit_metrics(id),
-  period             TEXT NOT NULL,
-  agg_kind           TEXT NOT NULL,
-  target_value       NUMERIC,
-  target_bool        BOOLEAN,
-  active_from        TIMESTAMPTZ NOT NULL,
-  active_to          TIMESTAMPTZ
-);
-
--- Derived metrics (formulas)
-CREATE TABLE IF NOT EXISTS derived_metrics (
-  id                 BIGSERIAL PRIMARY KEY,
-  habit_id           BIGINT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
-  slug               TEXT NOT NULL,
-  name               TEXT NOT NULL,
-  formula_expr       TEXT NOT NULL,
-  result_kind        TEXT NOT NULL,
-  unit_id            BIGINT REFERENCES units(id),
-  period             TEXT NOT NULL,
-  active_from        TIMESTAMPTZ NOT NULL,
-  active_to          TIMESTAMPTZ,
-  metadata           JSONB NOT NULL DEFAULT '{}',
-  UNIQUE (habit_id, slug)
-);
-
--- Derived metric variables
-CREATE TABLE IF NOT EXISTS derived_metric_vars (
-  id                 BIGSERIAL PRIMARY KEY,
-  derived_metric_id  BIGINT NOT NULL REFERENCES derived_metrics(id) ON DELETE CASCADE,
-  var_name           TEXT NOT NULL,
-  metric_id          BIGINT NOT NULL REFERENCES habit_metrics(id),
-  agg_kind           TEXT NOT NULL
-);
-
--- Daily rollups for performance
-CREATE TABLE IF NOT EXISTS habit_rollups_daily (
-  habit_id           BIGINT NOT NULL,
-  local_day          DATE NOT NULL,
-  metric_id          BIGINT,
-  value_num          NUMERIC,
-  value_bool         BOOLEAN,
-  computed_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (habit_id, local_day, metric_id)
-);
-
--- Metric translations for schema evolution
-CREATE TABLE IF NOT EXISTS metric_translations (
-  id                 BIGSERIAL PRIMARY KEY,
-  from_metric_version_id BIGINT NOT NULL REFERENCES habit_metric_versions(id),
-  to_metric_version_id   BIGINT NOT NULL REFERENCES habit_metric_versions(id),
-  conversion_kind    TEXT NOT NULL,
-  factor             NUMERIC,
-  custom_expr        TEXT,
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- Create indexes for performance
-CREATE INDEX IF NOT EXISTS idx_habits_user_id ON habits(user_id);
-CREATE INDEX IF NOT EXISTS idx_habit_versions_habit_id ON habit_versions(habit_id);
-CREATE INDEX IF NOT EXISTS idx_habit_versions_active ON habit_versions(habit_id, active_to) WHERE active_to IS NULL;
-CREATE INDEX IF NOT EXISTS idx_habit_metrics_habit_id ON habit_metrics(habit_id);
-CREATE INDEX IF NOT EXISTS idx_habit_metric_versions_metric_id ON habit_metric_versions(metric_id);
-CREATE INDEX IF NOT EXISTS idx_habit_metric_versions_active ON habit_metric_versions(metric_id, active_to) WHERE active_to IS NULL;
-CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_id ON habit_logs(habit_id);
-CREATE INDEX IF NOT EXISTS idx_habit_logs_local_day ON habit_logs(local_day);
-CREATE INDEX IF NOT EXISTS idx_habit_log_values_log_id ON habit_log_values(log_id);
-CREATE INDEX IF NOT EXISTS idx_habit_rollups_daily_habit_day ON habit_rollups_daily(habit_id, local_day);
--- Sample data for testing the habit tracker
-
--- Insert sample units
-INSERT INTO units (code, quantity_kind, to_base_factor, base_unit_code) VALUES
-('sec', 'time', 1, 'sec'),
-('min', 'time', 60, 'sec'),
-('hour', 'time', 3600, 'sec'),
-('words', 'count', 1, 'words'),
-('pages', 'count', 1, 'pages'),
-('km', 'distance', 1000, 'm'),
-('m', 'distance', 1, 'm'),
-('cal', 'energy', 1, 'cal')
-ON CONFLICT (code) DO NOTHING;
-
--- Insert sample user
-INSERT INTO users (email, tz) VALUES
-('test@example.com', 'America/Toronto')
-ON CONFLICT (email) DO NOTHING;
-
--- Get the user ID for foreign key references
--- In a real app, this would be handled by the application layer
-
--- Insert sample habits
-INSERT INTO habits (user_id, slug) VALUES
-(1, 'workout'),
-(1, 'brushing'),
-(1, 'study'),
-(1, 'tv-watching')
-ON CONFLICT (user_id, slug) DO NOTHING;
-
--- Insert habit versions
-INSERT INTO habit_versions (habit_id, version, name, description, category, polarity, active_from) VALUES
-(1, 1, 'Workout', 'Daily exercise routine', 'health', 'positive', NOW()),
-(2, 1, 'Brushing Teeth', 'Brush teeth twice daily', 'health', 'positive', NOW()),
-(3, 1, 'Study', 'Language learning session', 'education', 'positive', NOW()),
-(4, 1, 'TV Watching', 'Track TV watching time', 'entertainment', 'negative', NOW())
-ON CONFLICT (habit_id, version) DO NOTHING;
-
--- Insert habit metrics
-INSERT INTO habit_metrics (habit_id, slug) VALUES
-(1, 'duration'),
-(1, 'calories'),
-(2, 'brushed'),
-(3, 'study_time'),
-(3, 'words_learned'),
-(4, 'tv_minutes')
-ON CONFLICT (habit_id, slug) DO NOTHING;
-
--- Insert habit metric versions
-INSERT INTO habit_metric_versions (metric_id, version, name, metric_kind, unit_id, agg_kind_default, active_from) VALUES
--- Workout metrics
-(1, 1, 'Duration', 'DURATION', 2, 'SUM', NOW()),  -- minutes
-(2, 1, 'Calories', 'QUANTITY', 8, 'SUM', NOW()),  -- calories
--- Brushing metric
-(3, 1, 'Brushed', 'BOOLEAN', NULL, 'COUNT_TRUE', NOW()),
--- Study metrics
-(4, 1, 'Study Time', 'DURATION', 2, 'SUM', NOW()),  -- minutes
-(5, 1, 'Words Learned', 'COUNT', 4, 'SUM', NOW()),  -- words
--- TV watching metric
-(6, 1, 'TV Minutes', 'DURATION', 2, 'SUM', NOW())  -- minutes
-ON CONFLICT (metric_id, version) DO NOTHING;
-
--- Insert some sample targets (only if not exists)
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM habit_targets WHERE habit_id = 1 AND metric_id = 1) THEN
-        INSERT INTO habit_targets (habit_id, metric_id, period, agg_kind, target_value, active_from) VALUES
-        (1, 1, 'DAILY', 'SUM', 1800, NOW()),  -- 30 minutes workout daily (in seconds)
-        (2, 3, 'DAILY', 'COUNT_TRUE', 2, NOW()),  -- brush teeth 2 times daily
-        (3, 4, 'DAILY', 'SUM', 3600, NOW()),  -- 60 minutes study daily (in seconds)
-        (4, 6, 'DAILY', 'SUM', 0, NOW());  -- 0 minutes TV daily (negative habit)
-    END IF;
-END $$;
+  IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'period_type') THEN
+    DROP TYPE period_type;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agg_kind') THEN
+    DROP TYPE agg_kind;
+  END IF;
+END$$;
 
--- Insert some sample logs for the past week (only if not exists)
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM habit_logs WHERE habit_id = 1) THEN
-        INSERT INTO habit_logs (habit_id, habit_version_id, occurred_at, local_day, tz, source) VALUES
-        -- Workout logs
-        (1, 1, NOW() - INTERVAL '1 day', (NOW() - INTERVAL '1 day')::date, 'America/Toronto', 'ui'),
-        (1, 1, NOW() - INTERVAL '2 days', (NOW() - INTERVAL '2 days')::date, 'America/Toronto', 'ui'),
-        (1, 1, NOW() - INTERVAL '3 days', (NOW() - INTERVAL '3 days')::date, 'America/Toronto', 'ui'),
-        -- Brushing logs
-        (2, 2, NOW() - INTERVAL '1 day' + INTERVAL '8 hours', (NOW() - INTERVAL '1 day')::date, 'America/Toronto', 'ui'),
-        (2, 2, NOW() - INTERVAL '1 day' + INTERVAL '20 hours', (NOW() - INTERVAL '1 day')::date, 'America/Toronto', 'ui'),
-        (2, 2, NOW() - INTERVAL '2 days' + INTERVAL '8 hours', (NOW() - INTERVAL '2 days')::date, 'America/Toronto', 'ui'),
-        -- Study logs
-        (3, 3, NOW() - INTERVAL '1 day', (NOW() - INTERVAL '1 day')::date, 'America/Toronto', 'ui'),
-        (3, 3, NOW() - INTERVAL '2 days', (NOW() - INTERVAL '2 days')::date, 'America/Toronto', 'ui');
+-- =========================
+-- Types
+-- =========================
+CREATE TYPE period_type AS ENUM ('daily','weekly','monthly','rolling');
+CREATE TYPE agg_kind    AS ENUM ('sum','count','boolean');
 
-        -- Insert corresponding log values
-        INSERT INTO habit_log_values (log_id, metric_id, metric_version_id, value_num) VALUES
-        -- Workout values (duration in seconds, calories)
-        (1, 1, 1, 2700),  -- 45 minutes
-        (1, 2, 2, 350),   -- 350 calories
-        (2, 1, 1, 1800),  -- 30 minutes
-        (2, 2, 2, 250),   -- 250 calories
-        (3, 1, 1, 3600),  -- 60 minutes
-        (3, 2, 2, 450),   -- 450 calories
-        -- Study values (time in seconds, words)
-        (7, 4, 4, 3600),  -- 60 minutes
-        (7, 5, 5, 120),   -- 120 words
-        (8, 4, 4, 2700),  -- 45 minutes
-        (8, 5, 5, 95);    -- 95 words
+-- =========================
+-- Tables
+-- =========================
+CREATE TABLE app_user (
+  id             BIGSERIAL PRIMARY KEY,
+  email          CITEXT UNIQUE,
+  tz             TEXT NOT NULL DEFAULT 'America/Toronto',
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
-        -- Insert boolean values for brushing
-        INSERT INTO habit_log_values (log_id, metric_id, metric_version_id, value_bool) VALUES
-        (4, 3, 3, true),   -- morning brush
-        (5, 3, 3, true),   -- evening brush
-        (6, 3, 3, true);   -- morning brush day 2
-    END IF;
-END $$;
+CREATE TABLE habit (
+  id                   BIGSERIAL PRIMARY KEY,
+  user_id              BIGINT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+
+  name                 TEXT NOT NULL,
+  unit_label           TEXT,
+
+  agg                  agg_kind NOT NULL DEFAULT 'sum',
+
+  target_per_period    NUMERIC(12,2) NOT NULL DEFAULT 1,
+  per_log_default_qty  NUMERIC(12,2) NOT NULL DEFAULT 1,
+
+  period               period_type NOT NULL DEFAULT 'daily',
+
+  week_start_dow       INT NOT NULL DEFAULT 1 CHECK (week_start_dow BETWEEN 0 AND 6), -- 0..6
+  month_anchor_day     INT NOT NULL DEFAULT 1 CHECK (month_anchor_day BETWEEN 1 AND 28),
+
+  rolling_len_days     INT CHECK (rolling_len_days >= 1),
+  anchor_date          DATE NOT NULL DEFAULT DATE '1970-01-05', -- Monday baseline
+
+  tz                   TEXT, -- optional override for bucketing
+
+  is_active            BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX habit_user_idx ON habit(user_id);
+
+CREATE TABLE habit_log (
+  id            BIGSERIAL PRIMARY KEY,
+  habit_id      BIGINT NOT NULL REFERENCES habit(id) ON DELETE CASCADE,
+  occurred_at   TIMESTAMPTZ NOT NULL,      -- store UTC; UI collects in user TZ
+  quantity      NUMERIC(12,2) NOT NULL DEFAULT 1,
+  note          TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (quantity >= 0)
+);
+
+CREATE INDEX habit_log_habit_time_idx ON habit_log(habit_id, occurred_at);
+CREATE INDEX habit_log_time_idx       ON habit_log(occurred_at);
+
+-- =========================
+-- Seed data
+-- =========================
+
+-- Users
+INSERT INTO app_user (email, tz) VALUES
+  ('noah@example.com', 'America/Toronto'),
+  ('demo@example.com', 'America/Toronto');
+
+-- Habits for Noah
+-- 1) Workout: 60 minutes daily
+INSERT INTO habit (user_id, name, unit_label, agg, target_per_period, period, per_log_default_qty)
+SELECT id, 'Workout', 'minutes', 'sum', 60, 'daily', 60
+FROM app_user WHERE email='noah@example.com';
+
+-- 2) Learn Dutch words: 3 per week, week starts Monday
+INSERT INTO habit (user_id, name, unit_label, agg, target_per_period, period, week_start_dow, per_log_default_qty)
+SELECT id, 'Learn Dutch words', 'words', 'count', 3, 'weekly', 1, 1
+FROM app_user WHERE email='noah@example.com';
+
+-- 3) Read: 500 pages per month
+INSERT INTO habit (user_id, name, unit_label, agg, target_per_period, period, per_log_default_qty)
+SELECT id, 'Read', 'pages', 'sum', 500, 'monthly', 25
+FROM app_user WHERE email='noah@example.com';
+
+-- 4) Water intake: rolling 7 days, target 14 liters
+INSERT INTO habit (user_id, name, unit_label, agg, target_per_period, period, rolling_len_days, per_log_default_qty)
+SELECT id, 'Water Intake', 'liters', 'sum', 14, 'rolling', 7, 2
+FROM app_user WHERE email='noah@example.com';
+
+-- Grab habit IDs for seeding logs
+WITH
+  u AS (SELECT id AS user_id FROM app_user WHERE email='noah@example.com'),
+  h AS (
+    SELECT
+      (SELECT id FROM habit WHERE name='Workout' AND user_id=(SELECT user_id FROM u))           AS workout_id,
+      (SELECT id FROM habit WHERE name='Learn Dutch words' AND user_id=(SELECT user_id FROM u)) AS dutch_id,
+      (SELECT id FROM habit WHERE name='Read' AND user_id=(SELECT user_id FROM u))              AS read_id,
+      (SELECT id FROM habit WHERE name='Water Intake' AND user_id=(SELECT user_id FROM u))      AS water_id
+  )
+INSERT INTO habit_log (habit_id, occurred_at, quantity, note)
+SELECT workout_id, TIMESTAMPTZ '2025-09-10 18:00-04', 45, 'Evening run' FROM h UNION ALL
+SELECT workout_id, TIMESTAMPTZ '2025-09-11 07:30-04', 65, 'Gym session' FROM h UNION ALL
+
+SELECT dutch_id,   TIMESTAMPTZ '2025-09-09 12:00-04', 1,  'Word #1 (dinsdag)' FROM h UNION ALL
+SELECT dutch_id,   TIMESTAMPTZ '2025-09-10 12:00-04', 1,  'Word #2 (woensdag)' FROM h UNION ALL
+SELECT dutch_id,   TIMESTAMPTZ '2025-09-12 09:10-04', 1,  'Word #3 (vrijdag)'  FROM h UNION ALL
+
+SELECT read_id,    TIMESTAMPTZ '2025-09-01 20:15-04', 30, 'Chapter 1'      FROM h UNION ALL
+SELECT read_id,    TIMESTAMPTZ '2025-09-05 21:00-04', 40, 'Chapters 2-3'   FROM h UNION ALL
+SELECT read_id,    TIMESTAMPTZ '2025-09-08 22:05-04', 25, 'Short session'  FROM h UNION ALL
+SELECT read_id,    TIMESTAMPTZ '2025-09-12 19:30-04', 60, 'Long read'      FROM h UNION ALL
+
+SELECT water_id,   TIMESTAMPTZ '2025-09-07 08:00-04', 2,  'Morning bottle' FROM h UNION ALL
+SELECT water_id,   TIMESTAMPTZ '2025-09-08 12:00-04', 1,  'Lunch'          FROM h UNION ALL
+SELECT water_id,   TIMESTAMPTZ '2025-09-09 09:30-04', 2,  'After run'      FROM h UNION ALL
+SELECT water_id,   TIMESTAMPTZ '2025-09-10 14:10-04', 2,  'Afternoon'      FROM h UNION ALL
+SELECT water_id,   TIMESTAMPTZ '2025-09-11 10:05-04', 2,  'Morning'        FROM h UNION ALL
+SELECT water_id,   TIMESTAMPTZ '2025-09-12 11:45-04', 2,  'Pre-lunch'      FROM h UNION ALL
+SELECT water_id,   TIMESTAMPTZ '2025-09-13 09:00-04', 2,  'Morning'        FROM h
+;
+
+-- Demo user with a single boolean habit ("Meditate" once per day)
+INSERT INTO habit (user_id, name, unit_label, agg, target_per_period, period, per_log_default_qty)
+SELECT id, 'Meditate', NULL, 'boolean', 1, 'daily', 1
+FROM app_user WHERE email='demo@example.com';
+
+INSERT INTO habit_log (habit_id, occurred_at, quantity, note)
+SELECT h.id, TIMESTAMPTZ '2025-09-11 07:00-04', 1, '5-minute breathing'
+FROM habit h JOIN app_user u ON u.id=h.user_id
+WHERE u.email='demo@example.com' AND h.name='Meditate';
+
+COMMIT;
+
+\echo '==> Done. Tables created and sample data inserted.'
+

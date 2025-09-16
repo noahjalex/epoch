@@ -2,18 +2,133 @@
 <!DOCTYPE html>
 <html lang="en">
 
-<head><title>{{ block "title" . }}Home{{ end }}</title></head>
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Epoch</title>
+	<link rel="stylesheet" href="/static/css/styles.css">
+	<script src="/static/js/demo.js" defer></script>
+
+</head>
 
 <body>
 	<header>
-		<nav>
-			<li><a href="/">Home</a></li>
-		</nav>
+		<div class="wrap bar">
+			<h1>Epoch</h1>
+			<span class="muted">Simple habit tracking</span>
+			<div class="spacer"></div>
+			<button id="addHabitBtn">+ Habit</button>
+			<button id="addLogBtn" class="secondary">+ Log</button>
+			<button id="exportBtn" class="ghost">Export</button>
+			<label for="importInput" class="btn ghost" style="cursor:pointer">Import</label>
+			<input id="importInput" type="file" accept="application/json" style="display:none" />
+			<button id="clearBtn" class="danger">Reset</button>
+		</div>
 	</header>
 
-	{{ template "content" . }}
+	<main class="grid">
+		<section class="card">
+			<div class="pad">
+				<h3 style="margin-top:0">Your Habits</h3>
+				<div id="habitsList" class="list"></div>
+				<div id="noHabits" class="empty" style="display:none">No habits yet. Click <b>+
+						Habit</b> to add one.</div>
+			</div>
+		</section>
 
-	<footer>Generated at {{ time }}</footer>
+		<section class="card">
+			<div class="pad">
+				<div class="row">
+					<div style="flex:1">
+						<h3 id="activeHabitTitle" style="margin:0">Overview</h3>
+						<div class="muted" id="activeHabitMeta"></div>
+					</div>
+					<div style="text-align:right; min-width:220px">
+						<div id="todaySummary" class="muted">Today: –</div>
+						<div class="progress" title="Today's progress toward goal">
+							<i id="todayProgress" style="width:0%"></i>
+						</div>
+					</div>
+				</div>
+				<div class="charts" style="margin-top:12px">
+					<canvas id="barChart" width="1000" height="320"></canvas>
+					<canvas id="lineChart" width="1000" height="320"></canvas>
+				</div>
+			</div>
+			<div class="pad">
+				<h3 style="margin:8px 0 6px">Recent Logs</h3>
+				<table>
+					<thead>
+						<tr>
+							<th>Date</th>
+							<th>Habit</th>
+							<th>Qty</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody id="logsTable"></tbody>
+				</table>
+				<div id="noLogs" class="empty" style="display:none">No logs yet. Click <b>+ Log</b> to
+					record progress.</div>
+			</div>
+		</section>
+	</main>
+
+	<!-- Add Habit Modal -->
+	<dialog id="habitDialog">
+		<form method="dialog" id="habitForm" style="padding:16px">
+			<h3 style="margin:0 0 10px">Add Habit</h3>
+			<div class="row">
+				<div>
+					<label>Name</label>
+					<input id="habitName" required placeholder="e.g., Brush Teeth" />
+				</div>
+				<div>
+					<label>Unit</label>
+					<input id="habitUnit" placeholder="e.g., times, minutes" />
+				</div>
+				<div>
+					<label>Daily Goal (optional)</label>
+					<input id="habitGoal" type="number" min="0" step="any" placeholder="e.g., 2" />
+				</div>
+			</div>
+			<div class="row" style="margin-top:12px">
+				<button value="cancel" class="ghost" type="button"
+					onclick="habitDialog.close()">Cancel</button>
+				<div class="spacer"></div>
+				<button id="saveHabitBtn" value="default">Save Habit</button>
+			</div>
+		</form>
+	</dialog>
+
+	<!-- Add Log Modal -->
+	<dialog id="logDialog">
+		<form method="dialog" id="logForm" style="padding:16px">
+			<h3 style="margin:0 0 10px">Add Log</h3>
+			<div class="row">
+				<div>
+					<label>Habit</label>
+					<select id="logHabit"></select>
+				</div>
+				<div>
+					<label>Quantity</label>
+					<input id="logQty" type="number" min="0" step="any" placeholder="e.g., 20"
+						required />
+				</div>
+				<div>
+					<label>Date</label>
+					<input id="logDate" type="datetime-local" required />
+				</div>
+			</div>
+			<div class="row" style="margin-top:12px">
+				<button value="cancel" class="ghost" type="button"
+					onclick="logDialog.close()">Cancel</button>
+				<div class="spacer"></div>
+				<button id="saveLogBtn" value="default">Save Log</button>
+			</div>
+		</form>
+	</dialog>
+
 </body>
 
 </html>

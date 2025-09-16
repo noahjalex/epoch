@@ -1,9 +1,13 @@
 package models
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // JSONB is a custom type for handling PostgreSQL JSONB fields
@@ -27,176 +31,81 @@ func (j *JSONB) Scan(value interface{}) error {
 	return json.Unmarshal(bytes, j)
 }
 
-// User represents a user in the system
-type User struct {
-	ID        int64     `json:"id"`
-	Email     string    `json:"email"`
-	Tz        string    `json:"tz"`
-	CreatedAt time.Time `json:"created_at"`
+// If your DB enums are strings (recommended), keep these as string-based types.
+// Expand the consts to match your enum values.
+type AggKind string
+
+const (
+	AggSum     AggKind = "sum"
+	AggBoolean AggKind = "boolean"
+	AggCount   AggKind = "count"
+)
+
+func ToAggKind(s string) (AggKind, error) {
+	switch AggKind(s) {
+	case AggSum, AggBoolean, AggCount:
+		return AggKind(s), nil
+	default:
+		return "", fmt.Errorf("unrecognized aggregate kind %s", s)
+	}
 }
 
-// Habit represents a habit identity
+type PeriodType string
+
+const (
+	PeriodDaily   PeriodType = "daily"
+	PeriodWeekly  PeriodType = "weekly"
+	PeriodMonthly PeriodType = "monthly"
+	PeriodRolling PeriodType = "rolling"
+)
+
+func ToPeriodType(s string) (PeriodType, error) {
+	switch PeriodType(s) {
+	case PeriodDaily, PeriodWeekly, PeriodMonthly, PeriodRolling:
+		return PeriodType(s), nil
+	default:
+		return "", fmt.Errorf("unrecognized period type %s", s)
+	}
+}
+
+const (
+	HumanDateFormat  = "Jan 1, 2006 at 3:04pm"
+	ToFrontEndFormat = "2006-01-02T15:04"
+)
+
+// ---------- app_user ----------
+type AppUser struct {
+	ID        int64     `db:"id"         json:"id"`
+	Email     string    `db:"email"      json:"email"` // CITEXT -> string
+	TZ        string    `db:"tz"         json:"tz"`    // NOT NULL, default 'America/Toronto'
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
+// ---------- habit ----------
 type Habit struct {
-	ID         int64     `json:"id"`
-	UserID     int64     `json:"user_id"`
-	Slug       string    `json:"slug"`
-	IsArchived bool      `json:"is_archived"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID               int64           `db:"id"                   json:"id"`
+	UserID           int64           `db:"user_id"              json:"user_id"`
+	Name             string          `db:"name"                 json:"name"`
+	UnitLabel        sql.NullString  `db:"unit_label"           json:"unit_label,omitempty"`       // nullable
+	Agg              AggKind         `db:"agg"                  json:"agg"`                        // NOT NULL, default 'sum'
+	TargetPerPeriod  decimal.Decimal `db:"target_per_period"    json:"target_per_period"`          // NUMERIC(12,2)
+	PerLogDefaultQty decimal.Decimal `db:"per_log_default_qty"  json:"per_log_default_qty"`        // NUMERIC(12,2)
+	Period           PeriodType      `db:"period"               json:"period"`                     // NOT NULL, default 'daily'
+	WeekStartDOW     int32           `db:"week_start_dow"       json:"week_start_dow"`             // 0..6
+	MonthAnchorDay   int32           `db:"month_anchor_day"     json:"month_anchor_day"`           // 1..28
+	RollingLenDays   sql.NullInt32   `db:"rolling_len_days"     json:"rolling_len_days,omitempty"` // nullable, >= 1
+	AnchorDate       time.Time       `db:"anchor_date"          json:"anchor_date"`                // DATE (use time.Date w/ midnight)
+	TZOverride       sql.NullString  `db:"tz"                   json:"tz_override,omitempty"`      // nullable override
+	IsActive         bool            `db:"is_active"            json:"is_active"`
+	CreatedAt        time.Time       `db:"created_at"           json:"created_at"`
 }
 
-// HabitVersion represents a versioned habit definition
-type HabitVersion struct {
-	ID              int64      `json:"id"`
-	HabitID         int64      `json:"habit_id"`
-	Version         int        `json:"version"`
-	Name            string     `json:"name"`
-	Description     *string    `json:"description"`
-	Category        *string    `json:"category"`
-	Polarity        string     `json:"polarity"`
-	ScheduleRrule   *string    `json:"schedule_rrule"`
-	DailyExpectJSON JSONB      `json:"daily_expect_json"`
-	ActiveFrom      time.Time  `json:"active_from"`
-	ActiveTo        *time.Time `json:"active_to"`
-}
-
-// Unit represents a measurement unit
-type Unit struct {
-	ID           int64   `json:"id"`
-	Code         string  `json:"code"`
-	QuantityKind string  `json:"quantity_kind"`
-	ToBaseFactor float64 `json:"to_base_factor"`
-	BaseUnitCode string  `json:"base_unit_code"`
-}
-
-// HabitMetric represents a metric identity for a habit
-type HabitMetric struct {
-	ID        int64     `json:"id"`
-	HabitID   int64     `json:"habit_id"`
-	Slug      string    `json:"slug"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-// HabitMetricVersion represents a versioned metric definition
-type HabitMetricVersion struct {
-	ID             int64      `json:"id"`
-	MetricID       int64      `json:"metric_id"`
-	Version        int        `json:"version"`
-	Name           string     `json:"name"`
-	MetricKind     string     `json:"metric_kind"`
-	UnitID         *int64     `json:"unit_id"`
-	Polarity       *string    `json:"polarity"`
-	AggKindDefault string     `json:"agg_kind_default"`
-	MinValue       *float64   `json:"min_value"`
-	MaxValue       *float64   `json:"max_value"`
-	IsRequired     bool       `json:"is_required"`
-	ActiveFrom     time.Time  `json:"active_from"`
-	ActiveTo       *time.Time `json:"active_to"`
-	Metadata       JSONB      `json:"metadata"`
-}
-
-// HabitLog represents a logged habit event
+// ---------- habit_log ----------
 type HabitLog struct {
-	ID              int64     `json:"id"`
-	HabitID         int64     `json:"habit_id"`
-	HabitVersionID  int64     `json:"habit_version_id"`
-	OccurredAt      time.Time `json:"occurred_at"`
-	LocalDay        time.Time `json:"local_day"`
-	Tz              string    `json:"tz"`
-	Note            *string   `json:"note"`
-	SupersedesLogID *int64    `json:"supersedes_log_id"`
-	Source          *string   `json:"source"`
-	IdempotencyKey  *string   `json:"idempotency_key"`
-	CreatedAt       time.Time `json:"created_at"`
-}
-
-// HabitLogValue represents metric values for a log entry
-type HabitLogValue struct {
-	ID              int64    `json:"id"`
-	LogID           int64    `json:"log_id"`
-	MetricID        int64    `json:"metric_id"`
-	MetricVersionID int64    `json:"metric_version_id"`
-	ValueBool       *bool    `json:"value_bool"`
-	ValueNum        *float64 `json:"value_num"`
-	Metadata        JSONB    `json:"metadata"`
-}
-
-// HabitTarget represents goals/targets for habits
-type HabitTarget struct {
-	ID          int64      `json:"id"`
-	HabitID     int64      `json:"habit_id"`
-	MetricID    *int64     `json:"metric_id"`
-	Period      string     `json:"period"`
-	AggKind     string     `json:"agg_kind"`
-	TargetValue *float64   `json:"target_value"`
-	TargetBool  *bool      `json:"target_bool"`
-	ActiveFrom  time.Time  `json:"active_from"`
-	ActiveTo    *time.Time `json:"active_to"`
-}
-
-// HabitRollupDaily represents daily aggregated data
-type HabitRollupDaily struct {
-	HabitID    int64     `json:"habit_id"`
-	LocalDay   time.Time `json:"local_day"`
-	MetricID   *int64    `json:"metric_id"`
-	ValueNum   *float64  `json:"value_num"`
-	ValueBool  *bool     `json:"value_bool"`
-	ComputedAt time.Time `json:"computed_at"`
-}
-
-// HabitWithDetails combines habit with its current version and metrics
-type HabitWithDetails struct {
-	Habit   Habit               `json:"habit"`
-	Version HabitVersion        `json:"version"`
-	Metrics []MetricWithVersion `json:"metrics"`
-	Targets []HabitTarget       `json:"targets"`
-}
-
-// MetricWithVersion combines metric with its current version
-type MetricWithVersion struct {
-	Metric  HabitMetric        `json:"metric"`
-	Version HabitMetricVersion `json:"version"`
-	Unit    *Unit              `json:"unit"`
-}
-
-// LogRequest represents the request payload for logging habit data
-type LogRequest struct {
-	OccurredAt time.Time  `json:"occurred_at"`
-	Tz         string     `json:"tz"`
-	Values     []LogValue `json:"values"`
-	Note       string     `json:"note"`
-}
-
-// LogValue represents a single metric value in a log request
-type LogValue struct {
-	MetricSlug string   `json:"metric_slug"`
-	ValueNum   *float64 `json:"value_num"`
-	ValueBool  *bool    `json:"value_bool"`
-}
-
-// DashboardData represents aggregated data for the dashboard
-type DashboardData struct {
-	Habits     []HabitWithDetails `json:"habits"`
-	RecentLogs []LogWithDetails   `json:"recent_logs"`
-	Streaks    []StreakData       `json:"streaks"`
-}
-
-// LogWithDetails represents a log with its associated habit and metric details
-type LogWithDetails struct {
-	Log    HabitLog         `json:"log"`
-	Habit  HabitWithDetails `json:"habit"`
-	Values []LogValueDetail `json:"values"`
-}
-
-// LogValueDetail represents a log value with metric details
-type LogValueDetail struct {
-	Value  HabitLogValue     `json:"value"`
-	Metric MetricWithVersion `json:"metric"`
-}
-
-// StreakData represents streak information for a habit
-type StreakData struct {
-	HabitID       int64  `json:"habit_id"`
-	HabitName     string `json:"habit_name"`
-	CurrentStreak int    `json:"current_streak"`
-	BestStreak    int    `json:"best_streak"`
+	ID         int64           `db:"id"          json:"id"`
+	HabitID    int64           `db:"habit_id"    json:"habit_id"`
+	OccurredAt time.Time       `db:"occurred_at" json:"occurred_at"` // store UTC; UI collects in user TZ
+	Quantity   decimal.Decimal `db:"quantity"    json:"quantity"`    // NUMERIC(12,2), >= 0
+	Note       sql.NullString  `db:"note"        json:"note,omitempty"`
+	CreatedAt  time.Time       `db:"created_at"  json:"created_at"`
 }
