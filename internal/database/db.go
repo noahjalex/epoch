@@ -39,14 +39,6 @@ func SetupDB(log *logrus.Logger) (*DB, *models.Repo) {
 
 	log.Info("Database connection established")
 
-	// // Run migrations
-	// if err := db.RunMigrations("migrations"); err != nil {
-	// 	log.WithError(err).Fatal("Failed to run migrations")
-	// }
-	//
-	// log.Info("Database migrations completed")
-
-	// Initialize repository and handlers
 	repo := models.NewRepository(db.DB)
 	return db, repo
 }

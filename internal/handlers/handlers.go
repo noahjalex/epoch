@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/noahjalex/epoch/internal/auth"
+	"github.com/noahjalex/epoch/internal/middleware"
 	"github.com/noahjalex/epoch/internal/models"
 	"github.com/noahjalex/epoch/internal/utils"
 	"github.com/shopspring/decimal"
@@ -41,19 +43,32 @@ func (server *Server) Run(port string) {
 	// Handle requests for "/static/" by stripping the prefix and serving files
 	mux.Handle("/static/", http.StripPrefix("/static/", fs))
 
-	// Web routes
-	mux.HandleFunc("/", server.handleHome)
-	mux.HandleFunc("GET /logs/create", server.handleLogCreateForm)
+	// Apply auth middleware to ALL routes (including auth pages)
+	// The middleware will handle the logic for auth vs protected pages
+	allRoutes := http.NewServeMux()
 
-	// JSON API endpoints for frontend
-	mux.HandleFunc("GET /api/habits", server.handleHabitsListAPI)
-	mux.HandleFunc("POST /api/habits", server.handleHabitCreateAPI)
-	mux.HandleFunc("PATCH /api/habits/{id}", server.handleHabitUpdateAPI)
-	mux.HandleFunc("DELETE /api/habits/{id}", server.handleHabitDeleteAPI)
-	mux.HandleFunc("GET /api/logs", server.handleLogsListAPI)
-	mux.HandleFunc("POST /api/logs", server.handleLogCreateAPI)
-	mux.HandleFunc("PATCH /api/logs/{id}", server.handleLogUpdateAPI)
-	mux.HandleFunc("DELETE /api/logs/{id}", server.handleLogDeleteAPI)
+	// Auth routes - these will be handled by middleware but allowed through
+	allRoutes.HandleFunc("GET /login", server.handleLoginPage)
+	allRoutes.HandleFunc("POST /login", server.handleLogin)
+	allRoutes.HandleFunc("GET /signup", server.handleSignupPage)
+	allRoutes.HandleFunc("POST /signup", server.handleSignup)
+	allRoutes.HandleFunc("POST /logout", server.handleLogout)
+
+	// Protected routes
+	allRoutes.HandleFunc("/", server.handleHome)
+
+	// API routes
+	allRoutes.HandleFunc("GET /api/habits", server.handleHabitsListAPI)
+	allRoutes.HandleFunc("POST /api/habits", server.handleHabitCreateAPI)
+	allRoutes.HandleFunc("PATCH /api/habits/{id}", server.handleHabitUpdateAPI)
+	allRoutes.HandleFunc("DELETE /api/habits/{id}", server.handleHabitDeleteAPI)
+	allRoutes.HandleFunc("GET /api/logs", server.handleLogsListAPI)
+	allRoutes.HandleFunc("POST /api/logs", server.handleLogCreateAPI)
+	allRoutes.HandleFunc("PATCH /api/logs/{id}", server.handleLogUpdateAPI)
+	allRoutes.HandleFunc("DELETE /api/logs/{id}", server.handleLogDeleteAPI)
+
+	// Wrap ALL routes with auth middleware
+	mux.Handle("/", middleware.AuthMiddleware(server.repo, server.log)(allRoutes))
 
 	if open {
 		openServer(port)
@@ -65,9 +80,15 @@ func (server *Server) Run(port string) {
 }
 
 func (app *Server) handleHome(w http.ResponseWriter, r *http.Request) {
-	userID := int64(1) // Hardcoded for demo
 	ctx := r.Context()
-	habits, err := app.repo.ListHabitsByUser(ctx, userID, true)
+	user, ok := middleware.GetUserFromContext(ctx)
+	app.log.Infof("user: %+v", user)
+	if !ok {
+		// Redirect to login
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	habits, err := app.repo.ListHabitsByUser(ctx, user.ID, true)
 
 	if err != nil {
 		app.log.WithError(err).Error("Failed to get habits with details")
@@ -75,99 +96,15 @@ func (app *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.rend.Render(w, "home", habits)
-}
-
-func (app *Server) handleLogCreate(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := int64(1) // hardcoded for demo
-
-	if r.Method != http.MethodPost {
-		app.log.Error("Invalid HTTP method")
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+	data := struct {
+		Habits     []models.Habit
+		IsAuthPage bool
+	}{
+		Habits:     habits,
+		IsAuthPage: false,
 	}
 
-	// Get user to access their timezone
-	user, err := app.repo.GetUser(ctx, userID)
-	if err != nil {
-		app.log.WithError(err).Error("No user found")
-		http.Error(w, "User not found", http.StatusBadRequest)
-		return
-	}
-
-	fx := utils.New(r)
-
-	habitID := fx.Int64("habit_id", utils.Required(), utils.MinInt(1))
-	occurredAtStr := fx.String("occurred_at", utils.Required())
-	quantity := fx.Float64("quantity", utils.Required(), utils.MinFloat(0))
-	note := fx.String("note") // optional
-
-	// Parse the datetime in user's timezone, then convert to UTC
-	userTZ, err := time.LoadLocation(user.TZ)
-	if err != nil {
-		app.log.WithError(err).Error("Invalid user timezone")
-		userTZ = time.Local // fallback to local timezone
-	}
-
-	var occurredAt time.Time
-	if occurredAtStr != "" {
-		// Parse in user's timezone
-		occurredAt, err = time.ParseInLocation("2006-01-02T15:04", occurredAtStr, userTZ)
-		if err != nil {
-			app.log.WithError(err).Error("Invalid datetime format")
-			http.Error(w, "Invalid datetime format", http.StatusBadRequest)
-			return
-		}
-		// Convert to UTC for storage
-		occurredAt = occurredAt.UTC()
-	} else {
-		occurredAt = time.Now().UTC()
-	}
-
-	req := &models.HabitLog{
-		HabitID:    habitID,
-		OccurredAt: occurredAt,
-		Quantity:   decimal.NewFromFloat(quantity),
-		Note:       sql.NullString{String: note, Valid: note != ""},
-	}
-
-	// Verify habit is one of User's actual habits
-	habits, err := app.repo.ListHabitsByUser(ctx, userID, false)
-	if err != nil {
-		app.log.WithError(err).Error("Failed to return habits")
-		http.Error(w, "Invalid Request", http.StatusBadRequest)
-		return
-	}
-	var isHabit bool = false
-	for _, h := range habits {
-		if h.ID == req.HabitID {
-			isHabit = true
-		}
-	}
-	if isHabit != true {
-		app.log.WithError(err).Error("Failed to return habits")
-		http.Error(w, "Invalid Request", http.StatusBadRequest)
-		return
-	}
-
-	habitLog, err := app.repo.InsertLog(ctx, req)
-	if err != nil {
-		app.log.WithError(err).Error("Failed to create habit log")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	habitURL := fmt.Sprintf("/habits/%d", habitLog.HabitID)
-
-	if r.Header.Get("HX-Request") == "true" {
-		// htmx request: instruct client to do a full navigation
-		w.Header().Set("HX-Redirect", habitURL)
-		w.WriteHeader(http.StatusSeeOther) // 303 is fine; 200 also works
-		return
-	}
-
-	app.rend.Render(w, "habit", habitLog)
+	app.rend.Render(w, "home", data)
 }
 
 // writeNoContent returns 204 StatusNoContent and no resource
@@ -258,10 +195,15 @@ func logToFrontend(l *models.HabitLog, userTZ *time.Location) FrontendLog {
 }
 
 func (app *Server) handleHabitsListAPI(w http.ResponseWriter, r *http.Request) {
-	userID := int64(1) // Hardcoded for demo
 	ctx := r.Context()
+	user, ok := middleware.GetUserFromContext(ctx)
+	if !ok {
+		// Redirect to login
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
 
-	habits, err := app.repo.ListHabitsByUser(ctx, userID, true)
+	habits, err := app.repo.ListHabitsByUser(ctx, user.ID, true)
 	if err != nil {
 		app.log.WithError(err).Error("Failed to get habits")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -279,8 +221,13 @@ func (app *Server) handleHabitsListAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *Server) handleHabitCreateAPI(w http.ResponseWriter, r *http.Request) {
-	userID := int64(1) // Hardcoded for demo
 	ctx := r.Context()
+	user, ok := middleware.GetUserFromContext(ctx)
+	if !ok {
+		// Redirect to login
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
 
 	var req FrontendHabit
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -291,7 +238,7 @@ func (app *Server) handleHabitCreateAPI(w http.ResponseWriter, r *http.Request) 
 
 	// Transform to backend format
 	habit := &models.Habit{
-		UserID:           userID,
+		UserID:           user.ID,
 		Name:             req.Name,
 		UnitLabel:        sql.NullString{String: req.Unit, Valid: req.Unit != ""},
 		Agg:              models.AggSum,
@@ -379,18 +326,16 @@ func (app *Server) handleHabitDeleteAPI(w http.ResponseWriter, r *http.Request) 
 }
 
 func (app *Server) handleLogsListAPI(w http.ResponseWriter, r *http.Request) {
-	userID := int64(1) // Hardcoded for demo
 	ctx := r.Context()
-
-	user, err := app.repo.GetUser(ctx, userID)
-	if err != nil {
-		app.log.WithError(err).Error("No user found")
-		http.Error(w, "User not found", http.StatusBadRequest)
+	user, ok := middleware.GetUserFromContext(ctx)
+	if !ok {
+		// Redirect to login
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
 
 	// Get all habits for this user to filter logs
-	habits, err := app.repo.ListHabitsByUser(ctx, userID, false)
+	habits, err := app.repo.ListHabitsByUser(ctx, user.ID, false)
 	if err != nil {
 		app.log.WithError(err).Error("Failed to get habits")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -419,13 +364,11 @@ func (app *Server) handleLogsListAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *Server) handleLogCreateAPI(w http.ResponseWriter, r *http.Request) {
-	userID := int64(1)
 	ctx := r.Context()
-
-	user, err := app.repo.GetUser(ctx, userID)
-	if err != nil {
-		app.log.WithError(err).Error("No user found")
-		http.Error(w, "User not found", http.StatusBadRequest)
+	user, ok := middleware.GetUserFromContext(ctx)
+	if !ok {
+		// Redirect to login
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
 
@@ -464,19 +407,16 @@ func (app *Server) handleLogCreateAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	frontendLog := logToFrontend(createdLog, loc)
-	app.log.Infof("createdLog: %+v\n", frontendLog)
 	writeCreated(w, frontendLog)
 }
 
 func (app *Server) handleLogUpdateAPI(w http.ResponseWriter, r *http.Request) {
 	logIDStr := r.PathValue("id")
-	userID := int64(1)
 	ctx := r.Context()
-
-	user, err := app.repo.GetUser(ctx, userID)
-	if err != nil {
-		app.log.WithError(err).Error("No user found")
-		http.Error(w, "User not found", http.StatusBadRequest)
+	user, ok := middleware.GetUserFromContext(ctx)
+	if !ok {
+		// Redirect to login
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
 
@@ -549,54 +489,272 @@ func (app *Server) handleLogDeleteAPI(w http.ResponseWriter, r *http.Request) {
 	writeNoContent(w)
 }
 
-func (app *Server) handleLogCreateForm(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	habitIDStr := r.URL.Query().Get("habit_id")
+// ======= Authentication Handlers =======
 
-	var err error
-	var habitID int64
-	if habitIDStr != "" {
-		habitID, err = strconv.ParseInt(habitIDStr, 10, 64)
-		if err != nil {
-			app.log.WithError(err).Error("couldn't parse habitID")
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+func (app *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, ok := middleware.GetUserFromContext(ctx)
+	app.log.Infof("handleLoginPage - user: %+v, ok: %v, path: %s", user, ok, r.URL.Path)
+	if ok && user != nil {
+		app.log.Infof("Redirecting authenticated user from /login to home")
+		// Redirect to home page, this is a logged in user
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	app.log.Infof("Showing login page to unauthenticated user")
+	data := struct {
+		IsAuthPage bool
+		Error      string
+		Username   string
+	}{
+		IsAuthPage: true,
+	}
+	app.rend.Render(w, "login", data)
+}
+
+func (app *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	fx := utils.New(r)
+	username := fx.String("username", utils.Required())
+	password := fx.String("password", utils.Required())
+
+	if err := fx.Err(); err != nil {
+		data := struct {
+			IsAuthPage bool
+			Error      string
+			Username   string
+		}{
+			IsAuthPage: true,
+			Error:      "Username and password are required",
+			Username:   username,
+		}
+		app.rend.Render(w, "login", data)
+		return
+	}
+
+	// Get user by username
+	user, err := app.repo.GetUserByUsername(r.Context(), username)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			data := struct {
+				IsAuthPage bool
+				Error      string
+				Username   string
+			}{
+				IsAuthPage: true,
+				Error:      "Invalid username or password",
+				Username:   username,
+			}
+			app.rend.Render(w, "login", data)
 			return
 		}
-	}
-	userID := int64(1) // hardcoded for demo
-
-	// Get user to access their timezone
-	user, err := app.repo.GetUser(ctx, userID)
-	if err != nil {
-		app.log.WithError(err).Error("No user found")
-		http.Error(w, "User not found", http.StatusBadRequest)
+		app.log.WithError(err).Error("Failed to get user")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	habits, err := app.repo.ListHabitsByUser(ctx, userID, true)
-	if err != nil {
-		app.log.Warn("Habits not found")
-		http.Error(w, "No habits found", http.StatusNotFound)
+	// Check password
+	if !auth.CheckPassword(password, user.PasswordHash) {
+		data := struct {
+			IsAuthPage bool
+			Error      string
+			Username   string
+		}{
+			IsAuthPage: true,
+			Error:      "Invalid username or password",
+			Username:   username,
+		}
+		app.rend.Render(w, "login", data)
 		return
 	}
 
-	// Get current time in user's timezone
-	userTZ, err := time.LoadLocation(user.TZ)
+	// Create session
+	sessionToken, err := auth.GenerateSessionToken()
 	if err != nil {
-		app.log.WithError(err).Error("Invalid user timezone")
-		userTZ = time.Local // fallback to local timezone
+		app.log.WithError(err).Error("Failed to generate session token")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
 
-	currentTimeInUserTZ := time.Now().In(userTZ).Format("2006-01-02T15:04")
+	expiresAt := auth.GetSessionExpiry()
+	_, err = app.repo.CreateSession(r.Context(), user.ID, sessionToken, expiresAt)
+	if err != nil {
+		app.log.WithError(err).Error("Failed to create session")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
+	// Set session cookie
+	middleware.SetSessionCookie(w, sessionToken)
+
+	// Redirect to home
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (app *Server) handleSignupPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	_, ok := middleware.GetUserFromContext(ctx)
+	if ok {
+		// Redirect to home page, this is a logged in user
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
 	data := struct {
-		Habits        []models.Habit
-		SelectedHabit int64
-		CurrentTime   string
+		IsAuthPage bool
+		Error      string
+		Username   string
+		Email      string
 	}{
-		Habits:        habits,
-		SelectedHabit: habitID,
-		CurrentTime:   currentTimeInUserTZ,
+		IsAuthPage: true,
 	}
-	app.rend.RenderPartial(w, "log-create", data)
+	app.rend.Render(w, "signup", data)
+}
+
+func (app *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	fx := utils.New(r)
+	username := fx.String("username", utils.Required())
+	email := fx.String("email", utils.Required())
+	password := fx.String("password", utils.Required())
+	confirmPassword := fx.String("confirm_password", utils.Required())
+	timezone := fx.String("timezone") // optional
+
+	if err := fx.Err(); err != nil {
+		data := struct {
+			IsAuthPage bool
+			Error      string
+			Username   string
+			Email      string
+		}{
+			IsAuthPage: true,
+			Error:      "All fields are required",
+			Username:   username,
+			Email:      email,
+		}
+		app.rend.Render(w, "signup", data)
+		return
+	}
+
+	// Validate passwords match
+	if password != confirmPassword {
+		data := struct {
+			IsAuthPage bool
+			Error      string
+			Username   string
+			Email      string
+		}{
+			IsAuthPage: true,
+			Error:      "Passwords do not match",
+			Username:   username,
+			Email:      email,
+		}
+		app.rend.Render(w, "signup", data)
+		return
+	}
+
+	// Check if username already exists
+	_, err := app.repo.GetUserByUsername(r.Context(), username)
+	if err == nil {
+		data := struct {
+			IsAuthPage bool
+			Error      string
+			Username   string
+			Email      string
+		}{
+			IsAuthPage: true,
+			Error:      "Username already exists",
+			Username:   username,
+			Email:      email,
+		}
+		app.rend.Render(w, "signup", data)
+		return
+	} else if err != sql.ErrNoRows {
+		app.log.WithError(err).Error("Failed to check username")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Hash password
+	passwordHash, err := auth.HashPassword(password)
+	if err != nil {
+		app.log.WithError(err).Error("Failed to hash password")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Create user
+	user, err := app.repo.CreateUser(r.Context(), username, email, passwordHash, timezone)
+	if err != nil {
+		app.log.WithError(err).Error("Failed to create user")
+		data := struct {
+			IsAuthPage bool
+			Error      string
+			Username   string
+			Email      string
+		}{
+			IsAuthPage: true,
+			Error:      "Failed to create account. Username or email may already exist.",
+			Username:   username,
+			Email:      email,
+		}
+		app.rend.Render(w, "signup", data)
+		return
+	}
+
+	// Create session
+	sessionToken, err := auth.GenerateSessionToken()
+	if err != nil {
+		app.log.WithError(err).Error("Failed to generate session token")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	expiresAt := auth.GetSessionExpiry()
+	_, err = app.repo.CreateSession(r.Context(), user.ID, sessionToken, expiresAt)
+	if err != nil {
+		app.log.WithError(err).Error("Failed to create session")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Set session cookie
+	middleware.SetSessionCookie(w, sessionToken)
+
+	// Redirect to home
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (app *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get session token from cookie
+	if c, err := r.Cookie("session_token"); err == nil && c.Value != "" {
+		_ = app.repo.DeleteSession(r.Context(), c.Value)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    "",
+		Path:     "/", // match original Path
+		Domain:   "",  // set if you originally set it
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode, // match original SameSite
+		Secure:   false,                // Match the setting in SetSessionCookie
+		MaxAge:   -1,                   // expire immediately (don’t rely on Expires alone)
+	})
+
+	w.Header().Set("Cache-Control", "no-store")
+
+	w.WriteHeader(http.StatusNoContent) // 204
 }

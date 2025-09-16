@@ -7,11 +7,15 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 	<title>Epoch</title>
 	<link rel="stylesheet" href="/static/css/styles.css">
+	{{ if not .IsAuthPage }}
 	<script src="/static/js/demo.js" defer></script>
-
+	{{ end }}
 </head>
 
 <body>
+	{{ if .IsAuthPage }}
+		{{ template "content" . }}
+	{{ else }}
 	<header>
 		<div class="wrap bar">
 			<h1>Epoch</h1>
@@ -22,7 +26,7 @@
 			<button id="exportBtn" class="ghost">Export</button>
 			<label for="importInput" class="btn ghost" style="cursor:pointer">Import</label>
 			<input id="importInput" type="file" accept="application/json" style="display:none" />
-			<button id="clearBtn" class="danger">Reset</button>
+			<button id="logoutBtn">Logout</button>
 		</div>
 	</header>
 
@@ -129,6 +133,7 @@
 		</form>
 	</dialog>
 
+	{{ end }}
 </body>
 
 </html>

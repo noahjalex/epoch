@@ -1,50 +1,207 @@
-// ======= Data layer (API calls) =======
+// ======= Error Handling System =======
+const errorHandler = {
+	// Show banner error at the top of a form
+	showBannerError(formElement, message) {
+		this.clearBannerErrors(formElement);
+		
+		const banner = document.createElement('div');
+		banner.className = 'error-banner';
+		banner.textContent = message;
+		
+		formElement.insertBefore(banner, formElement.firstChild);
+	},
+
+	// Show field-specific errors inline
+	showFieldErrors(formElement, errors) {
+		this.clearFieldErrors(formElement);
+		
+		errors.forEach(error => {
+			if (!error.field) return;
+			
+			const field = formElement.querySelector(`[name="${error.field}"], #${error.field}`);
+			if (!field) return;
+			
+			// Add error class to field
+			field.classList.add('error');
+			
+			// Create error message element
+			const errorMsg = document.createElement('div');
+			errorMsg.className = 'error-message';
+			errorMsg.textContent = error.message;
+			
+			// Insert error message after the field
+			field.parentNode.insertBefore(errorMsg, field.nextSibling);
+		});
+	},
+
+	// Show success message as banner
+	showSuccess(formElement, message) {
+		this.clearBannerErrors(formElement);
+		
+		const banner = document.createElement('div');
+		banner.className = 'success-banner';
+		banner.textContent = message;
+		
+		formElement.insertBefore(banner, formElement.firstChild);
+		
+		// Auto-remove success message after 3 seconds
+		setTimeout(() => {
+			if (banner.parentNode) {
+				banner.parentNode.removeChild(banner);
+			}
+		}, 3000);
+	},
+
+	// Clear all errors from a form
+	clearErrors(formElement) {
+		this.clearBannerErrors(formElement);
+		this.clearFieldErrors(formElement);
+	},
+
+	// Clear banner errors
+	clearBannerErrors(formElement) {
+		const banners = formElement.querySelectorAll('.error-banner, .success-banner');
+		banners.forEach(banner => banner.remove());
+	},
+
+	// Clear field errors
+	clearFieldErrors(formElement) {
+		// Remove error classes from fields
+		const errorFields = formElement.querySelectorAll('.error');
+		errorFields.forEach(field => field.classList.remove('error'));
+		
+		// Remove error messages
+		const errorMessages = formElement.querySelectorAll('.error-message');
+		errorMessages.forEach(msg => msg.remove());
+	}
+};
+
+// ======= Enhanced API Layer =======
 const api = {
+	// Handle API response and errors
+	async handleResponse(response, options = {}) {
+		const contentType = response.headers.get('content-type');
+		let data;
+		
+		if (contentType && contentType.includes('application/json')) {
+			data = await response.json();
+		} else {
+			data = { success: !response.ok, message: response.ok ? 'Success' : 'An error occurred' };
+		}
+		
+		if (!response.ok) {
+			// Handle standardized error response
+			if (data.errors && options.form) {
+				this.displayErrors(data, options);
+			}
+			throw new Error(data.message || `HTTP ${response.status}`);
+		}
+		
+		// Handle success message
+		if (data.success && data.message && options.form) {
+			errorHandler.showSuccess(options.form, data.message);
+		}
+		
+		return data;
+	},
+
+	// Display errors using the error handler
+	displayErrors(errorResponse, options) {
+		if (!options.form) return;
+		
+		errorHandler.clearErrors(options.form);
+		
+		if (errorResponse.errors) {
+			// Separate field errors from general errors
+			const fieldErrors = errorResponse.errors.filter(e => e.field);
+			const generalErrors = errorResponse.errors.filter(e => !e.field);
+			
+			// Show field errors inline
+			if (fieldErrors.length > 0) {
+				errorHandler.showFieldErrors(options.form, fieldErrors);
+			}
+			
+			// Show general errors as banner
+			if (generalErrors.length > 0) {
+				const message = generalErrors.map(e => e.message).join('. ');
+				errorHandler.showBannerError(options.form, message);
+			}
+		} else if (errorResponse.message) {
+			// Show general error message as banner
+			errorHandler.showBannerError(options.form, errorResponse.message);
+		}
+	},
+
 	async getHabits() {
 		const response = await fetch('/api/habits');
-		return await response.json();
+		return await this.handleResponse(response);
 	},
-	async createHabit(habit) {
+
+	async createHabit(habit, options = {}) {
 		const response = await fetch('/api/habits', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(habit)
 		});
-		return await response.json();
+		return await this.handleResponse(response, options);
 	},
-	async updateHabit(habit) {
+
+	async updateHabit(habit, options = {}) {
 		const response = await fetch(`/api/habits/${habit.id}`, {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(habit)
 		});
-		return await response.json();
+		return await this.handleResponse(response, options);
 	},
+
 	async deleteHabit(id) {
-		await fetch(`/api/habits/${id}`, { method: 'DELETE' });
+		const response = await fetch(`/api/habits/${id}`, { method: 'DELETE' });
+		return await this.handleResponse(response);
 	},
+
 	async getLogs() {
 		const response = await fetch('/api/logs');
-		return await response.json();
+		return await this.handleResponse(response);
 	},
-	async createLog(log) {
+
+	async createLog(log, options = {}) {
 		const response = await fetch('/api/logs', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(log)
 		});
-		return await response.json();
+		return await this.handleResponse(response, options);
 	},
-	async updateLog(log) {
+
+	async updateLog(log, options = {}) {
 		const response = await fetch(`/api/logs/${log.id}`, {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(log)
 		});
-		return await response.json();
+		return await this.handleResponse(response, options);
 	},
+
 	async deleteLog(id) {
-		await fetch(`/api/logs/${id}`, { method: 'DELETE' });
+		const response = await fetch(`/api/logs/${id}`, { method: 'DELETE' });
+		return await this.handleResponse(response);
+	},
+
+	async logout() {
+		const res = await fetch('/logout', {
+			method: 'POST',
+			credentials: 'include',
+			headers: {
+				'Accept': 'application/json'
+			}
+		});
+
+		if (!res.ok) {
+			console.error('Logout failed', res.status);
+		}
+
+		window.location.assign('/login');
 	}
 };
 
@@ -357,11 +514,16 @@ function refreshChartsOnResize() {
 async function editHabit(id) {
 	const h = getHabit(id);
 	if (!h) return;
+	
+	const form = habitDialog.querySelector('form');
+	errorHandler.clearErrors(form);
+	
 	habitName.value = h.name;
 	habitUnit.value = h.unit || '';
 	habitGoal.value = h.goal ?? '';
 	habitDialog.returnValue = '';
 	habitDialog.showModal();
+	
 	document.getElementById('saveHabitBtn').onclick = async () => {
 		const updatedHabit = {
 			id: h.id,
@@ -370,11 +532,12 @@ async function editHabit(id) {
 			goal: habitGoal.value ? Number(habitGoal.value) : undefined
 		};
 		try {
-			await api.updateHabit(updatedHabit);
+			await api.updateHabit(updatedHabit, { form });
 			await loadData();
 			habitDialog.close();
 		} catch (error) {
-			alert('Failed to update habit: ' + error.message);
+			// Error handling is now done by the API layer
+			console.error('Failed to update habit:', error);
 		}
 	};
 }
@@ -396,11 +559,16 @@ async function deleteHabit(id) {
 async function editLog(id) {
 	const l = state.logs.find(x => x.id === id);
 	if (!l) return;
+	
+	const form = logDialog.querySelector('form');
+	errorHandler.clearErrors(form);
+	
 	logHabit.value = l.habitId;
 	logQty.value = l.qty;
 	logDate.value = formatDateForForm(l.date);
 	logDialog.returnValue = '';
 	logDialog.showModal();
+	
 	document.getElementById('saveLogBtn').onclick = async () => {
 		const updatedLog = {
 			id: l.id,
@@ -409,11 +577,12 @@ async function editLog(id) {
 			date: logDate.value
 		};
 		try {
-			await api.updateLog(updatedLog);
+			await api.updateLog(updatedLog, { form });
 			await loadData();
 			logDialog.close();
 		} catch (error) {
-			alert('Failed to update log: ' + error.message);
+			// Error handling is now done by the API layer
+			console.error('Failed to update log:', error);
 		}
 	}
 }
@@ -434,8 +603,12 @@ function refreshLogHabitOptions() {
 
 // ======= Event wiring =======
 document.getElementById('addHabitBtn').onclick = () => {
+	const form = habitDialog.querySelector('form');
+	errorHandler.clearErrors(form);
+	
 	habitName.value = ''; habitUnit.value = ''; habitGoal.value = '';
 	habitDialog.showModal();
+	
 	document.getElementById('saveHabitBtn').onclick = async () => {
 		const newHabit = {
 			name: habitName.value.trim() || 'New Habit',
@@ -443,22 +616,28 @@ document.getElementById('addHabitBtn').onclick = () => {
 			goal: habitGoal.value ? Number(habitGoal.value) : 0
 		};
 		try {
-			await api.createHabit(newHabit);
+			await api.createHabit(newHabit, { form });
 			await loadData();
 			habitDialog.close();
 		} catch (error) {
-			alert('Failed to create habit: ' + error.message);
+			// Error handling is now done by the API layer
+			console.error('Failed to create habit:', error);
 		}
 	}
 };
 
 document.getElementById('addLogBtn').onclick = () => {
 	if (state.habits.length === 0) { alert('Create a habit first.'); return }
+	
+	const form = logDialog.querySelector('form');
+	errorHandler.clearErrors(form);
+	
 	refreshLogHabitOptions();
 	logHabit.value = activeHabitId || state.habits[0].id;
 	logQty.value = '';
 	logDate.value = getCurrentDateTimeLocal();
 	logDialog.showModal();
+	
 	document.getElementById('saveLogBtn').onclick = async () => {
 		const newLog = {
 			habitId: logHabit.value,
@@ -466,11 +645,12 @@ document.getElementById('addLogBtn').onclick = () => {
 			date: logDate.value
 		};
 		try {
-			await api.createLog(newLog);
+			await api.createLog(newLog, { form });
 			await loadData();
 			logDialog.close();
 		} catch (error) {
-			alert('Failed to create log: ' + error.message);
+			// Error handling is now done by the API layer
+			console.error('Failed to create log:', error);
 		}
 	}
 };
@@ -494,14 +674,16 @@ document.getElementById('importInput').addEventListener('change', (e) => {
 	reader.readAsText(file);
 });
 
-document.getElementById('clearBtn').onclick = () => {
-	if (!confirm('Reset all data?')) return;
-	// Clear the habit selection cache when resetting data
-	clearSelectedHabit();
-	store.reset();
-	state = store.get();
-	activeHabitId = null;
-	renderAll();
+document.getElementById('logoutBtn').onclick = () => {
+	if (!confirm('Are you sure you want to logout?')) return;
+
+	// Handle logout and redirect to /login
+	try {
+		api.logout();
+	} catch (error) {
+		alert('Failed to logout: ' + error.message);
+	}
+
 };
 
 window.addEventListener('resize', debounce(refreshChartsOnResize, 150));

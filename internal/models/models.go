@@ -75,10 +75,22 @@ const (
 
 // ---------- app_user ----------
 type AppUser struct {
-	ID        int64     `db:"id"         json:"id"`
-	Email     string    `db:"email"      json:"email"` // CITEXT -> string
-	TZ        string    `db:"tz"         json:"tz"`    // NOT NULL, default 'America/Toronto'
-	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	ID           int64     `db:"id"            json:"id"`
+	Email        string    `db:"email"         json:"email"`         // CITEXT -> string
+	Username     string    `db:"username"      json:"username"`      // VARCHAR(50) UNIQUE NOT NULL
+	PasswordHash string    `db:"password_hash" json:"password_hash"` // VARCHAR(255) NOT NULL
+	TZ           string    `db:"tz"            json:"tz"`            // NOT NULL, default 'America/Toronto'
+	CreatedAt    time.Time `db:"created_at"    json:"created_at"`
+}
+
+// ---------- user_sessions ----------
+type UserSession struct {
+	ID           string    `db:"id"            json:"id"`
+	UserID       int64     `db:"user_id"       json:"user_id"`
+	SessionToken string    `db:"session_token" json:"session_token"`
+	ExpiresAt    time.Time `db:"expires_at"    json:"expires_at"`
+	CreatedAt    time.Time `db:"created_at"    json:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at"    json:"updated_at"`
 }
 
 // ---------- habit ----------

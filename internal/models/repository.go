@@ -25,20 +25,33 @@ func NewRepository(db *sqlx.DB) *Repo {
 
 // -------------------- USERS --------------------
 
-func (r *Repo) CreateUser(ctx context.Context, email, tz string) (*AppUser, error) {
+func (r *Repo) CreateUser(ctx context.Context, username, email, passwordHash, tz string) (*AppUser, error) {
 	var u AppUser
 	err := r.db.GetContext(ctx, &u, `
-		INSERT INTO app_user (email, tz)
-		VALUES ($1, COALESCE(NULLIF($2,''), 'America/Toronto'))
-		RETURNING id, email, tz, created_at
-	`, email, tz)
+		INSERT INTO app_user (username, email, password_hash, tz)
+		VALUES ($1, $2, $3, COALESCE(NULLIF($4,''), 'America/Toronto'))
+		RETURNING id, username, email, password_hash, tz, created_at
+	`, username, email, passwordHash, tz)
 	return &u, err
+}
+
+func (r *Repo) GetUserByUsername(ctx context.Context, username string) (*AppUser, error) {
+	var u AppUser
+	err := r.db.GetContext(ctx, &u, `
+		SELECT id, username, email, password_hash, tz, created_at
+		FROM app_user
+		WHERE username = $1
+	`, username)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
 func (r *Repo) GetUserByEmail(ctx context.Context, email string) (*AppUser, error) {
 	var u AppUser
 	err := r.db.GetContext(ctx, &u, `
-		SELECT id, email, tz, created_at
+		SELECT id, username, email, password_hash, tz, created_at
 		FROM app_user
 		WHERE email = $1
 	`, email)
@@ -51,7 +64,7 @@ func (r *Repo) GetUserByEmail(ctx context.Context, email string) (*AppUser, erro
 func (r *Repo) GetUser(ctx context.Context, userID int64) (*AppUser, error) {
 	var u AppUser
 	err := r.db.GetContext(ctx, &u, `
-		SELECT id, email, tz, created_at
+		SELECT id, username, email, password_hash, tz, created_at
 		FROM app_user
 		WHERE id = $1
 	`, userID)
@@ -59,6 +72,52 @@ func (r *Repo) GetUser(ctx context.Context, userID int64) (*AppUser, error) {
 		return nil, err
 	}
 	return &u, nil
+}
+
+// -------------------- SESSIONS --------------------
+
+func (r *Repo) CreateSession(ctx context.Context, userID int64, sessionToken string, expiresAt time.Time) (*UserSession, error) {
+	var s UserSession
+	err := r.db.GetContext(ctx, &s, `
+		INSERT INTO user_sessions (user_id, session_token, expires_at)
+		VALUES ($1, $2, $3)
+		RETURNING id, user_id, session_token, expires_at, created_at, updated_at
+	`, userID, sessionToken, expiresAt)
+	return &s, err
+}
+
+func (r *Repo) GetSessionByToken(ctx context.Context, sessionToken string) (*UserSession, error) {
+	var s UserSession
+	err := r.db.GetContext(ctx, &s, `
+		SELECT id, user_id, session_token, expires_at, created_at, updated_at
+		FROM user_sessions
+		WHERE session_token = $1
+	`, sessionToken)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (r *Repo) DeleteSession(ctx context.Context, sessionToken string) error {
+	_, err := r.db.ExecContext(ctx, `
+		DELETE FROM user_sessions WHERE session_token = $1
+	`, sessionToken)
+	return err
+}
+
+func (r *Repo) DeleteExpiredSessions(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, `
+		DELETE FROM user_sessions WHERE expires_at < NOW()
+	`)
+	return err
+}
+
+func (r *Repo) DeleteUserSessions(ctx context.Context, userID int64) error {
+	_, err := r.db.ExecContext(ctx, `
+		DELETE FROM user_sessions WHERE user_id = $1
+	`, userID)
+	return err
 }
 
 // -------------------- HABITS --------------------
