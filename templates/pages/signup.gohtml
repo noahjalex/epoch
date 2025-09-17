@@ -1,0 +1,90 @@
+{{ define "content" }}
+<div class="auth-container">
+  <div class="auth-card">
+    <div class="auth-header">
+      <h1>Epoch</h1>
+      <h2>Create your account</h2>
+      <p class="muted">
+        Or
+        <a href="/login" class="auth-link">sign in to your existing account</a>
+      </p>
+    </div>
+    
+    {{ if .Error }}
+    <div class="error-banner">
+      {{ .Error }}
+    </div>
+    {{ end }}
+
+    <form class="auth-form" action="/signup" method="POST" id="signupForm">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" required 
+               placeholder="Choose a username" value="{{ .Username }}">
+        <small class="form-hint">Must be at least 3 characters long</small>
+      </div>
+      
+      <div class="form-group">
+        <label for="email">Email address</label>
+        <input id="email" name="email" type="email" required 
+               placeholder="your@email.com" value="{{ .Email }}">
+      </div>
+      
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required 
+               placeholder="Create a password">
+        <small class="form-hint">Any length, any characters</small>
+      </div>
+      
+      <div class="form-group">
+        <label for="confirm_password">Confirm Password</label>
+        <input id="confirm_password" name="confirm_password" type="password" required 
+               placeholder="Confirm your password">
+      </div>
+      
+      <div class="form-group">
+        <label for="timezone">Timezone (optional)</label>
+        <select id="timezone" name="timezone">
+          <option value="">Auto-detect</option>
+          <option value="America/New_York">Eastern Time (America/New_York)</option>
+          <option value="America/Chicago">Central Time (America/Chicago)</option>
+          <option value="America/Denver">Mountain Time (America/Denver)</option>
+          <option value="America/Los_Angeles">Pacific Time (America/Los_Angeles)</option>
+          <option value="Europe/London">London (Europe/London)</option>
+          <option value="Europe/Paris">Paris (Europe/Paris)</option>
+          <option value="Asia/Tokyo">Tokyo (Asia/Tokyo)</option>
+          <option value="Australia/Sydney">Sydney (Australia/Sydney)</option>
+        </select>
+      </div>
+
+      <button type="submit" class="auth-button">
+        Create account
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+// Add error handling for signup form
+document.addEventListener('DOMContentLoaded', function() {
+  const form = document.getElementById('signupForm');
+  
+  form.addEventListener('submit', function(e) {
+    // Clear any existing errors when form is submitted
+    const errorBanners = form.querySelectorAll('.error-banner');
+    errorBanners.forEach(banner => {
+      if (!banner.textContent.includes('{{ .Error }}')) {
+        banner.remove();
+      }
+    });
+    
+    const errorFields = form.querySelectorAll('.error');
+    errorFields.forEach(field => field.classList.remove('error'));
+    
+    const errorMessages = form.querySelectorAll('.error-message');
+    errorMessages.forEach(msg => msg.remove());
+  });
+});
+</script>
+{{ end }}
