@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/noahjalex/epoch/internal/auth"
+	"github.com/noahjalex/epoch/internal/logging"
 	"github.com/noahjalex/epoch/internal/middleware"
 	"github.com/noahjalex/epoch/internal/models"
 	"github.com/noahjalex/epoch/internal/utils"
@@ -19,21 +20,22 @@ import (
 )
 
 type Server struct {
-	rend *Renderer
-	repo *models.Repo
-	log  *logrus.Logger
+	rend      *Renderer
+	repo      *models.Repo
+	log       *logrus.Logger
+	logConfig *logging.Config
 }
 
-func NewServer(repo *models.Repo, log *logrus.Logger) (*Server, error) {
-	rend, err := NewRenderer()
+func NewServer(repo *models.Repo, log *logrus.Logger, logConfig *logging.Config) (*Server, error) {
+	rend, err := NewRendererWithLogger(log)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Server{rend: rend, repo: repo, log: log}, nil
+	return &Server{rend: rend, repo: repo, log: log, logConfig: logConfig}, nil
 }
 
-func (server *Server) Run(port string) {
+func (server *Server) Run(port string) error {
 	open := false
 
 	mux := http.NewServeMux()
@@ -67,34 +69,75 @@ func (server *Server) Run(port string) {
 	allRoutes.HandleFunc("PATCH /api/logs/{id}", server.handleLogUpdateAPI)
 	allRoutes.HandleFunc("DELETE /api/logs/{id}", server.handleLogDeleteAPI)
 
-	// Wrap ALL routes with auth middleware
-	mux.Handle("/", middleware.AuthMiddleware(server.repo, server.log)(allRoutes))
+	// Apply middleware in order: Request ID -> HTTP Logging -> Auth
+	var handler http.Handler = allRoutes
+
+	// Apply auth middleware first (innermost)
+	handler = middleware.AuthMiddleware(server.repo, server.log)(handler)
+
+	// Apply HTTP logging middleware if enabled
+	if server.logConfig.HTTPLogging {
+		handler = LoggingMiddleware(server.log)(handler)
+	}
+
+	// Apply request ID middleware (outermost)
+	handler = middleware.RequestIDMiddleware()(handler)
+
+	mux.Handle("/", handler)
 
 	if open {
 		openServer(port)
 	}
-	err := http.ListenAndServe(port, mux)
-	if err != nil {
-		panic(err)
-	}
+
+	server.log.WithField("port", port).Info("HTTP server listening")
+	return http.ListenAndServe(port, mux)
 }
 
 func (app *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	requestID := middleware.GetRequestIDFromContext(ctx)
+
 	user, ok := middleware.GetUserFromContext(ctx)
-	app.log.Infof("user: %+v", user)
 	if !ok {
-		// Redirect to login
+		app.log.WithFields(logrus.Fields{
+			"component":  "handler",
+			"action":     "home",
+			"request_id": requestID,
+		}).Debug("No authenticated user found in context, redirecting to login")
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	habits, err := app.repo.ListHabitsByUser(ctx, user.ID, true)
 
+	app.log.WithFields(logrus.Fields{
+		"component":  "handler",
+		"action":     "home",
+		"user_id":    user.ID,
+		"username":   user.Username,
+		"request_id": requestID,
+	}).Debug("Loading home page for authenticated user")
+
+	habits, err := app.repo.ListHabitsByUser(ctx, user.ID, true)
 	if err != nil {
-		app.log.WithError(err).Error("Failed to get habits with details")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		app.log.WithFields(logrus.Fields{
+			"component":  "handler",
+			"action":     "home",
+			"user_id":    user.ID,
+			"username":   user.Username,
+			"request_id": requestID,
+			"error":      err.Error(),
+		}).Error("Database query failed while fetching user habits with details")
+		http.Error(w, "Failed to load your habits", http.StatusInternalServerError)
 		return
 	}
+
+	app.log.WithFields(logrus.Fields{
+		"component":   "handler",
+		"action":      "home",
+		"user_id":     user.ID,
+		"username":    user.Username,
+		"request_id":  requestID,
+		"habit_count": len(habits),
+	}).Info("Successfully loaded home page with user habits")
 
 	data := struct {
 		Habits     []models.Habit
@@ -222,19 +265,56 @@ func (app *Server) handleHabitsListAPI(w http.ResponseWriter, r *http.Request) {
 
 func (app *Server) handleHabitCreateAPI(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	requestID := middleware.GetRequestIDFromContext(ctx)
+
 	user, ok := middleware.GetUserFromContext(ctx)
 	if !ok {
-		// Redirect to login
+		app.log.WithFields(logrus.Fields{
+			"component":  "api",
+			"action":     "habit_create",
+			"request_id": requestID,
+		}).Warn("Unauthenticated API request to create habit")
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
 
 	var req FrontendHabit
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		app.log.WithError(err).Error("Failed to decode request JSON")
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		app.log.WithFields(logrus.Fields{
+			"component":  "api",
+			"action":     "habit_create",
+			"user_id":    user.ID,
+			"username":   user.Username,
+			"request_id": requestID,
+			"error":      err.Error(),
+		}).Error("Failed to decode JSON request body for habit creation")
+		http.Error(w, "Invalid JSON request body", http.StatusBadRequest)
 		return
 	}
+
+	// Validate request
+	if req.Name == "" {
+		app.log.WithFields(logrus.Fields{
+			"component":  "api",
+			"action":     "habit_create",
+			"user_id":    user.ID,
+			"username":   user.Username,
+			"request_id": requestID,
+		}).Warn("Habit creation attempted with empty name")
+		http.Error(w, "Habit name is required", http.StatusBadRequest)
+		return
+	}
+
+	app.log.WithFields(logrus.Fields{
+		"component":  "api",
+		"action":     "habit_create",
+		"user_id":    user.ID,
+		"username":   user.Username,
+		"request_id": requestID,
+		"habit_name": req.Name,
+		"habit_unit": req.Unit,
+		"habit_goal": req.Goal,
+	}).Info("Creating new habit for user")
 
 	// Transform to backend format
 	habit := &models.Habit{
@@ -253,10 +333,28 @@ func (app *Server) handleHabitCreateAPI(w http.ResponseWriter, r *http.Request) 
 
 	createdHabit, err := app.repo.CreateHabit(ctx, habit)
 	if err != nil {
-		app.log.WithError(err).Error("Failed to create habit")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		app.log.WithFields(logrus.Fields{
+			"component":  "api",
+			"action":     "habit_create",
+			"user_id":    user.ID,
+			"username":   user.Username,
+			"request_id": requestID,
+			"habit_name": req.Name,
+			"error":      err.Error(),
+		}).Error("Database error while creating habit")
+		http.Error(w, "Failed to create habit", http.StatusInternalServerError)
 		return
 	}
+
+	app.log.WithFields(logrus.Fields{
+		"component":  "api",
+		"action":     "habit_create",
+		"user_id":    user.ID,
+		"username":   user.Username,
+		"request_id": requestID,
+		"habit_id":   createdHabit.ID,
+		"habit_name": createdHabit.Name,
+	}).Info("Successfully created new habit")
 
 	frontendHabit := habitToFrontend(createdHabit)
 	writeCreated(w, frontendHabit)
@@ -494,14 +592,12 @@ func (app *Server) handleLogDeleteAPI(w http.ResponseWriter, r *http.Request) {
 func (app *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user, ok := middleware.GetUserFromContext(ctx)
-	app.log.Infof("handleLoginPage - user: %+v, ok: %v, path: %s", user, ok, r.URL.Path)
 	if ok && user != nil {
-		app.log.Infof("Redirecting authenticated user from /login to home")
-		// Redirect to home page, this is a logged in user
+		app.log.Debug("Redirecting authenticated user from login page to home")
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	app.log.Infof("Showing login page to unauthenticated user")
+
 	data := struct {
 		IsAuthPage bool
 		Error      string

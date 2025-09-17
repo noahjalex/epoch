@@ -82,33 +82,90 @@ func LoggingMiddleware(log *logrus.Logger) func(http.Handler) http.Handler {
 			lrw := &loggingRW{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(lrw, r)
 
+			duration := time.Since(start)
+
 			fields := logrus.Fields{
-				"method":      r.Method,
-				"path":        r.URL.Path,
-				"query":       r.URL.RawQuery,
-				"remote":      r.RemoteAddr,
-				"status":      lrw.status,
-				"bytes":       lrw.bytes,
-				"duration_ms": time.Since(start).Milliseconds(),
-				"headers":     sanitizeHeaders(r.Header),
+				"component":      "http",
+				"method":         r.Method,
+				"path":           r.URL.Path,
+				"query":          r.URL.RawQuery,
+				"remote_addr":    r.RemoteAddr,
+				"status_code":    lrw.status,
+				"response_bytes": lrw.bytes,
+				"duration_ms":    duration.Milliseconds(),
+				"duration_ns":    duration.Nanoseconds(),
+				"user_agent":     r.Header.Get("User-Agent"),
 			}
-			if len(body) > 0 {
+
+			// Add request ID if available
+			if requestID := r.Header.Get("X-Request-ID"); requestID != "" {
+				fields["request_id"] = requestID
+			}
+
+			// Add user info if available from context
+			// Note: Disabled to avoid import cycles. In production, you'd want to
+			// extract user info from the context here for better traceability.
+
+			// Only log headers in debug mode to avoid noise
+			if log.Level >= logrus.DebugLevel {
+				fields["request_headers"] = sanitizeHeaders(r.Header)
+			}
+
+			// Log request body for POST/PUT/PATCH requests
+			if len(body) > 0 && (r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH") {
 				if isTextLike(r.Header.Get("Content-Type")) {
 					// truncate if over limit
 					if len(body) > maxBodyLog {
 						fields["body_truncated"] = true
 						body = body[:maxBodyLog]
 					}
-					fields["body"] = string(body)
+					fields["request_body"] = string(body)
 				} else {
-					fields["body"] = "[binary or non-text body omitted]"
+					fields["request_body"] = "[binary or non-text body omitted]"
 				}
 			}
+
 			// HTMX flag is often useful
 			if r.Header.Get("HX-Request") == "true" {
-				fields["htmx"] = true
+				fields["htmx_request"] = true
 			}
-			log.WithFields(fields).Info("http request")
+
+			// Choose log level based on status code
+			var logLevel logrus.Level
+			var message string
+
+			switch {
+			case lrw.status >= 500:
+				logLevel = logrus.ErrorLevel
+				message = "HTTP request completed with server error"
+			case lrw.status >= 400:
+				logLevel = logrus.WarnLevel
+				message = "HTTP request completed with client error"
+			case lrw.status >= 300:
+				logLevel = logrus.InfoLevel
+				message = "HTTP request completed with redirect"
+			default:
+				logLevel = logrus.InfoLevel
+				message = "HTTP request completed successfully"
+			}
+
+			// Log slow requests as warnings
+			if duration > 1*time.Second {
+				logLevel = logrus.WarnLevel
+				message = "Slow HTTP request completed"
+				fields["slow_request"] = true
+			}
+
+			log.WithFields(fields).Log(logLevel, message)
 		})
 	}
+}
+
+// Helper function to get user from request context
+func getUserFromRequest(r *http.Request) interface{} {
+	// This is a simplified version - you'd need to import your middleware package
+	// and use the proper context key. For now, we'll return nil to avoid import cycles.
+	// In a real implementation, you'd do something like:
+	// return middleware.GetUserFromContext(r.Context())
+	return nil
 }

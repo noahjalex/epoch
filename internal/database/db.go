@@ -24,12 +24,12 @@ func SetupDB(log *logrus.Logger) (*DB, *models.Repo) {
 	dbPassword := getEnv("DB_PASSWORD", "devpass")
 	dbName := getEnv("DB_NAME", "epoch")
 
-	log.WithFields(map[string]interface{}{
-		"db_host": dbHost,
-		"db_port": dbPort,
-		"db_user": dbUser,
-		"db_name": dbName,
-	}).Info("Database configuration loaded")
+	log.WithFields(logrus.Fields{
+		"host": dbHost,
+		"port": dbPort,
+		"user": dbUser,
+		"name": dbName,
+	}).Info("Connecting to database")
 
 	// Connect to database
 	db, err := new(dbHost, dbPort, dbUser, dbPassword, dbName)

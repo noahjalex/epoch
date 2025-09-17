@@ -9,31 +9,43 @@ import (
 )
 
 func main() {
+	// Parse CLI flags first
+	var (
+		port      = flag.String("port", "8080", "port to use")
+		logLevel  = flag.String("log-level", "", "log level (debug, info, warn, error)")
+		logFormat = flag.String("log-format", "", "log format (text, json)")
+	)
+	flag.Parse()
 
-	log := logging.Init()
+	// Override config with CLI flags if provided
+	logConfig := logging.LoadConfig()
+	if *logLevel != "" {
+		logConfig.Level = *logLevel
+	}
+	if *logFormat != "" {
+		logConfig.Format = *logFormat
+	}
+
+	// Initialize logging with configuration
+	log := logging.Init(logConfig)
 
 	db, repo := database.SetupDB(log)
 	defer db.Close()
 
-	// Port / Flag parsing
-	pport := flag.String("port", "8080", "port to use")
-	flag.Parse()
-
-	var port string
-	if pport == nil {
-		port = "8080"
-	} else {
-		port = *pport
-	}
-	if port[:1] != ":" {
-		port = ":" + port
+	// Normalize port
+	if (*port)[:1] != ":" {
+		*port = ":" + *port
 	}
 
 	// Run Server
-	server, err := handlers.NewServer(repo, log)
+	server, err := handlers.NewServer(repo, log, logConfig)
 	if err != nil {
-		log.Fatalf("error starting server %v", err)
+		log.WithError(err).Fatal("Failed to create server")
 	}
 
-	server.Run(port)
+	log.WithField("port", *port).Info("Starting server")
+
+	if err := server.Run(*port); err != nil {
+		log.WithError(err).Fatal("Server failed")
+	}
 }

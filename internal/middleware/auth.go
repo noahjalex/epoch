@@ -22,26 +22,21 @@ func AuthMiddleware(repo *models.Repo, log *logrus.Logger) func(http.Handler) ht
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			isAuthPage := r.URL.Path == "/login" || r.URL.Path == "/signup"
-			log.Infof("AuthMiddleware - path: %s, isAuthPage: %v", r.URL.Path, isAuthPage)
 
 			// Get session token from cookie
 			cookie, err := r.Cookie("session_token")
 			if err != nil {
-				log.Infof("AuthMiddleware - no session cookie found, error: %v", err)
+				log.Debug("No session cookie found")
 				// No session cookie
 				if isAuthPage {
-					log.Infof("AuthMiddleware - allowing access to auth page without session")
 					// Allow access to auth pages without session
 					next.ServeHTTP(w, r)
 					return
 				}
 				// Redirect to login for protected pages
-				log.Infof("AuthMiddleware - redirecting to login (no cookie)")
 				http.Redirect(w, r, "/login", http.StatusSeeOther)
 				return
 			}
-
-			log.Infof("AuthMiddleware - found session cookie: %s", cookie.Value)
 
 			// Look up session in database
 			session, err := repo.GetSessionByToken(r.Context(), cookie.Value)
@@ -84,18 +79,15 @@ func AuthMiddleware(repo *models.Repo, log *logrus.Logger) func(http.Handler) ht
 				log.WithError(err).Error("Failed to get user from session")
 				clearSessionCookie(w)
 				if isAuthPage {
-					log.Infof("AuthMiddleware - allowing access to auth page despite user lookup failure")
 					// Allow access to auth pages if user lookup fails
 					next.ServeHTTP(w, r)
 					return
 				}
 				// Redirect to login for protected pages
-				log.Infof("AuthMiddleware - redirecting to login (user lookup failed)")
 				http.Redirect(w, r, "/login", http.StatusSeeOther)
 				return
 			}
 
-			log.Infof("AuthMiddleware - found valid user: %+v, adding to context", user)
 			// Add user to request context
 			ctx := context.WithValue(r.Context(), UserContextKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
