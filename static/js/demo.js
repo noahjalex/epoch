@@ -1,34 +1,68 @@
+// === === NAV BAR === === 
+(function() {
+	const navToggle = document.getElementById('navToggle');
+	const navActions = document.getElementById('navActions');
+
+
+	function closeMenu() {
+		navActions.classList.remove('open');
+		navToggle.setAttribute('aria-expanded', 'false');
+		navToggle.querySelector('.material-icons').textContent = 'menu';
+	}
+	function openMenu() {
+		navActions.classList.add('open');
+		navToggle.setAttribute('aria-expanded', 'true');
+		navToggle.querySelector('.material-icons').textContent = 'close';
+	}
+
+
+	navToggle.addEventListener('click', () => {
+		const isOpen = navActions.classList.contains('open');
+		if (isOpen) closeMenu(); else openMenu();
+	});
+
+
+	// Close on Escape
+	window.addEventListener('keydown', (e) => {
+		if (e.key === 'Escape') closeMenu();
+	});
+	// Close if clicking outside (mobile)
+	document.addEventListener('click', (e) => {
+		const withinHeader = e.target.closest('header');
+		if (!withinHeader) closeMenu();
+	});
+})();
 // ======= Error Handling System =======
 const errorHandler = {
 	// Show banner error at the top of a form
 	showBannerError(formElement, message) {
 		this.clearBannerErrors(formElement);
-		
+
 		const banner = document.createElement('div');
 		banner.className = 'error-banner';
 		banner.textContent = message;
-		
+
 		formElement.insertBefore(banner, formElement.firstChild);
 	},
 
 	// Show field-specific errors inline
 	showFieldErrors(formElement, errors) {
 		this.clearFieldErrors(formElement);
-		
+
 		errors.forEach(error => {
 			if (!error.field) return;
-			
+
 			const field = formElement.querySelector(`[name="${error.field}"], #${error.field}`);
 			if (!field) return;
-			
+
 			// Add error class to field
 			field.classList.add('error');
-			
+
 			// Create error message element
 			const errorMsg = document.createElement('div');
 			errorMsg.className = 'error-message';
 			errorMsg.textContent = error.message;
-			
+
 			// Insert error message after the field
 			field.parentNode.insertBefore(errorMsg, field.nextSibling);
 		});
@@ -37,13 +71,13 @@ const errorHandler = {
 	// Show success message as banner
 	showSuccess(formElement, message) {
 		this.clearBannerErrors(formElement);
-		
+
 		const banner = document.createElement('div');
 		banner.className = 'success-banner';
 		banner.textContent = message;
-		
+
 		formElement.insertBefore(banner, formElement.firstChild);
-		
+
 		// Auto-remove success message after 3 seconds
 		setTimeout(() => {
 			if (banner.parentNode) {
@@ -69,7 +103,7 @@ const errorHandler = {
 		// Remove error classes from fields
 		const errorFields = formElement.querySelectorAll('.error');
 		errorFields.forEach(field => field.classList.remove('error'));
-		
+
 		// Remove error messages
 		const errorMessages = formElement.querySelectorAll('.error-message');
 		errorMessages.forEach(msg => msg.remove());
@@ -82,13 +116,13 @@ const api = {
 	async handleResponse(response, options = {}) {
 		const contentType = response.headers.get('content-type');
 		let data;
-		
+
 		if (contentType && contentType.includes('application/json')) {
 			data = await response.json();
 		} else {
 			data = { success: !response.ok, message: response.ok ? 'Success' : 'An error occurred' };
 		}
-		
+
 		if (!response.ok) {
 			// Handle standardized error response
 			if (data.errors && options.form) {
@@ -96,31 +130,31 @@ const api = {
 			}
 			throw new Error(data.message || `HTTP ${response.status}`);
 		}
-		
+
 		// Handle success message
 		if (data.success && data.message && options.form) {
 			errorHandler.showSuccess(options.form, data.message);
 		}
-		
+
 		return data;
 	},
 
 	// Display errors using the error handler
 	displayErrors(errorResponse, options) {
 		if (!options.form) return;
-		
+
 		errorHandler.clearErrors(options.form);
-		
+
 		if (errorResponse.errors) {
 			// Separate field errors from general errors
 			const fieldErrors = errorResponse.errors.filter(e => e.field);
 			const generalErrors = errorResponse.errors.filter(e => !e.field);
-			
+
 			// Show field errors inline
 			if (fieldErrors.length > 0) {
 				errorHandler.showFieldErrors(options.form, fieldErrors);
 			}
-			
+
 			// Show general errors as banner
 			if (generalErrors.length > 0) {
 				const message = generalErrors.map(e => e.message).join('. ');
@@ -382,18 +416,18 @@ function renderOverview() {
 	const h = getHabit(activeHabitId);
 	if (!h) { activeHabitTitle.textContent = 'Overview'; activeHabitMeta.textContent = 'Select a habit'; todayProgress.style.width = '0%'; todaySummary.textContent = 'Today: –'; drawEmpty(barChart); drawEmpty(lineChart); return }
 	activeHabitTitle.textContent = h.name;
-	activeHabitMeta.textContent = `${h.goal ? `Daily goal: ${fmt(h.goal)} ${humanUnit(h.unit)}` : 'No daily goal'} · Unit: ${humanUnit(h.unit)}`;
+	activeHabitMeta.textContent = `${h.goal ? `Daily goal: ${fmt(h.goal)} ${humanUnit(h.unit)}` : 'No daily goal'}`;
 	const todayTotal = sumToday(h.id);
 	const pct = h.goal ? Math.min(100, (todayTotal / h.goal) * 100) : 0;
 	todayProgress.style.width = pct + '%';
 	todaySummary.textContent = `Today: ${fmt(todayTotal)} ${humanUnit(h.unit)}${h.goal ? ` (${Math.round(pct)}% of goal)` : ''}`;
 
 	const { labels, values } = totalsByDate(h.id, 30);
-	drawBar(barChart, labels, values, `${h.name} — last 30 days (${humanUnit(h.unit)})`);
+	drawBar(barChart, labels, values, `last 30 days (${humanUnit(h.unit)})`);
 
 	// cumulative line
 	const cum = values.reduce((arr, v) => { arr.push((arr.at(-1) || 0) + v); return arr }, []);
-	drawLine(lineChart, labels, cum, `${h.name} — cumulative (${humanUnit(h.unit)})`);
+	drawLine(lineChart, labels, cum, `cumulative (${humanUnit(h.unit)})`);
 }
 
 function renderLogs() {
@@ -436,7 +470,7 @@ function scaleData(values, h) { const max = Math.max(1, ...values); const pad = 
 
 function drawAxes(ctx, w, h, title) {
 	ctx.clearRect(0, 0, w, h);
-	ctx.fillStyle = '#c7d2fe'; ctx.font = '16px system-ui'; ctx.textAlign = 'left'; ctx.fillText(title, 16, 26);
+	ctx.fillStyle = '#c7d2fe'; ctx.font = '2rem system-ui'; ctx.textAlign = 'left'; ctx.fillText(title, 16, 26);
 	ctx.strokeStyle = 'rgba(255,255,255,.12)';
 	ctx.lineWidth = 1; ctx.beginPath();
 	// horizontal grid lines
@@ -460,7 +494,7 @@ function drawBar(canvas, labels, values, title = '') {
 		roundRect(ctx, x, y, wbar, hbar, r); ctx.fill();
 	}
 	// X labels every 5th day
-	ctx.fillStyle = '#8b93a7'; ctx.font = '11px system-ui'; ctx.textAlign = 'center';
+	ctx.fillStyle = '#8b93a7'; ctx.font = '1rem system-ui'; ctx.textAlign = 'center';
 	for (let i = 0; i < N; i += 5) { const x = 20 + i * (bw + gap) + bw / 2; ctx.fillText(labels[i].slice(5), x, h - 6) }
 }
 
@@ -483,7 +517,7 @@ function drawLine(canvas, labels, values, title = '') {
 		ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
 	}
 	// X labels every 5th day
-	ctx.fillStyle = '#8b93a7'; ctx.font = '11px system-ui'; ctx.textAlign = 'center';
+	ctx.fillStyle = '#8b93a7'; ctx.font = '1rem system-ui'; ctx.textAlign = 'center';
 	for (let i = 0; i < N; i += 5) { const x = baseX + (chartW) * (i / (N - 1)); ctx.fillText(labels[i].slice(5), x, h - 6) }
 }
 
@@ -514,16 +548,16 @@ function refreshChartsOnResize() {
 async function editHabit(id) {
 	const h = getHabit(id);
 	if (!h) return;
-	
+
 	const form = habitDialog.querySelector('form');
 	errorHandler.clearErrors(form);
-	
+
 	habitName.value = h.name;
 	habitUnit.value = h.unit || '';
 	habitGoal.value = h.goal ?? '';
 	habitDialog.returnValue = '';
 	habitDialog.showModal();
-	
+
 	document.getElementById('saveHabitBtn').onclick = async () => {
 		const updatedHabit = {
 			id: h.id,
@@ -559,16 +593,16 @@ async function deleteHabit(id) {
 async function editLog(id) {
 	const l = state.logs.find(x => x.id === id);
 	if (!l) return;
-	
+
 	const form = logDialog.querySelector('form');
 	errorHandler.clearErrors(form);
-	
+
 	logHabit.value = l.habitId;
 	logQty.value = l.qty;
 	logDate.value = formatDateForForm(l.date);
 	logDialog.returnValue = '';
 	logDialog.showModal();
-	
+
 	document.getElementById('saveLogBtn').onclick = async () => {
 		const updatedLog = {
 			id: l.id,
@@ -605,10 +639,10 @@ function refreshLogHabitOptions() {
 document.getElementById('addHabitBtn').onclick = () => {
 	const form = habitDialog.querySelector('form');
 	errorHandler.clearErrors(form);
-	
+
 	habitName.value = ''; habitUnit.value = ''; habitGoal.value = '';
 	habitDialog.showModal();
-	
+
 	document.getElementById('saveHabitBtn').onclick = async () => {
 		const newHabit = {
 			name: habitName.value.trim() || 'New Habit',
@@ -628,16 +662,16 @@ document.getElementById('addHabitBtn').onclick = () => {
 
 document.getElementById('addLogBtn').onclick = () => {
 	if (state.habits.length === 0) { alert('Create a habit first.'); return }
-	
+
 	const form = logDialog.querySelector('form');
 	errorHandler.clearErrors(form);
-	
+
 	refreshLogHabitOptions();
 	logHabit.value = activeHabitId || state.habits[0].id;
 	logQty.value = '';
 	logDate.value = getCurrentDateTimeLocal();
 	logDialog.showModal();
-	
+
 	document.getElementById('saveLogBtn').onclick = async () => {
 		const newLog = {
 			habitId: logHabit.value,

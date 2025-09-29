@@ -24,7 +24,9 @@ body {
 body {
 	margin: 0;
 	font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-	background: radial-gradient(var(--screen-size) 800px at 80% -10%, #1b2140 0%, transparent 60%), var(--bg);
+	background: radial-gradient(var(--screen-size) 800px at 80% -10%, #1b2140 0%, #0f122000 60%, #0f122000 100%), var(--bg);
+	background-repeat: no-repeat;
+	background-attachment: fixed;
 	color: var(--text);
 }
 
@@ -38,16 +40,19 @@ header {
 	box-shadow: var(--shadow);
 }
 
+
 .wrap {
 	max-width: var(--screen-size);
 	margin: 0 auto;
-	padding: 16px;
+	padding: 12px 16px;
 }
+
 
 .bar {
 	display: flex;
 	align-items: center;
 	gap: 12px;
+	position: relative;
 }
 
 .bar h1 {
@@ -56,9 +61,15 @@ header {
 	letter-spacing: .4px
 }
 
+.muted {
+	color: var(--muted);
+	font-size: 14px;
+}
+
 .spacer {
 	flex: 1
 }
+
 
 button,
 .btn {
@@ -72,7 +83,16 @@ button,
 	cursor: pointer;
 	box-shadow: var(--shadow);
 	transition: transform .05s ease, filter .2s ease;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
 }
+
+button .material-icons {
+	font-size: 20px;
+	line-height: 1;
+}
+
 
 button.secondary {
 	background: #2a304a;
@@ -93,6 +113,71 @@ button.danger {
 
 button:active {
 	transform: translateY(1px);
+}
+
+
+/* Navigation actions container */
+#navActions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+
+/* Hamburger toggle (hidden on desktop) */
+#navToggle {
+	display: none;
+	/* shown on small screens */
+	background: transparent;
+	color: var(--text);
+	border: 1px solid rgba(255, 255, 255, .14);
+}
+
+
+/* Mobile styles */
+@media (max-width: 768px) {
+	.muted {
+		display: none;
+	}
+
+	.bar {
+		padding-right: 48px;
+	}
+
+	#navToggle {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+
+	/* Convert actions into a dropdown panel */
+	#navActions {
+		position: absolute;
+		top: calc(100% + 8px);
+		right: 16px;
+		left: 16px;
+		background: var(--panel);
+		border: 1px solid rgba(255, 255, 255, .08);
+		border-radius: var(--radius);
+		padding: 12px;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 10px;
+		display: none;
+		/* hidden until opened */
+		box-shadow: var(--shadow);
+	}
+
+	#navActions.open {
+		display: flex;
+	}
+
+	#navActions button,
+	#navActions .btn {
+		width: 100%;
+		justify-content: center;
+	}
 }
 
 .grid {
@@ -219,6 +304,46 @@ th {
 	letter-spacing: .5px
 }
 
+#logsTable td:last-child {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 8px;
+	white-space: nowrap;
+	padding-top: 8px;
+	padding-bottom: 8px;
+}
+
+#logsTable td:last-child button,
+#logsTable td:last-child .btn {
+	line-height: 1;
+	padding: 8px 12px;
+	height: 36px;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+#logsTable td,
+#logsTable th {
+	vertical-align: middle;
+}
+
+@media (max-width: 480px) {
+	#logsTable td:last-child {
+		flex-wrap: wrap;
+		row-gap: 8px;
+		white-space: normal;
+	}
+
+	#logsTable td:last-child button,
+	#logsTable td:last-child .btn {
+		height: 34px;
+		padding: 8px 10px;
+		font-size: 12px;
+	}
+}
+
 .charts {
 	display: grid;
 	grid-template-columns: 1fr;
@@ -318,7 +443,8 @@ select.error:focus {
 	align-items: center;
 	justify-content: center;
 	padding: 20px;
-	background: radial-gradient(var(--screen-size) 800px at 50% -10%, #1b2140 0%, transparent 60%), var(--bg);
+	background: radial-gradient(var(--screen-size) 800px at 50% -10%, #1b2140 0%, #0f122000 60%, #0f122000 100%), var(--bg);
+	background-repeat: no-repeat;
 }
 
 /* Auth card */

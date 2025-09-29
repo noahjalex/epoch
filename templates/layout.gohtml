@@ -7,6 +7,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 	<title>Epoch</title>
 	<link rel="stylesheet" href="/static/css/styles.css">
+	<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 	{{ if not .IsAuthPage }}
 	<script src="/static/js/demo.js" defer></script>
 	{{ end }}
@@ -18,15 +19,26 @@
 	{{ else }}
 	<header>
 		<div class="wrap bar">
+			<button id="navToggle" aria-label="Open menu" aria-expanded="false">
+				<span class="material-icons" aria-hidden="true">menu</span>
+			</button>
+
 			<h1>Epoch</h1>
 			<span class="muted">Simple habit tracking</span>
 			<div class="spacer"></div>
-			<button id="addHabitBtn">+ Habit</button>
-			<button id="addLogBtn" class="secondary">+ Log</button>
-			<button id="exportBtn" class="ghost">Export</button>
-			<label for="importInput" class="btn ghost" style="cursor:pointer">Import</label>
-			<input id="importInput" type="file" accept="application/json" style="display:none" />
-			<button id="logoutBtn">Logout</button>
+
+			<nav id="navActions" aria-label="Primary">
+				<button id="addHabitBtn"><span class="material-icons">add_task</span>Habit</button>
+				<button id="addLogBtn" class="secondary"><span class="material-icons">playlist_add</span>Log</button>
+				<button id="exportBtn" class="ghost"><span class="material-icons">ios_share</span>Export</button>
+
+				<label for="importInput" class="btn ghost" style="cursor:pointer">
+					<span class="material-icons">file_download</span>Import
+				</label>
+				<input id="importInput" type="file" accept="application/json" style="display:none" />
+
+				<button id="logoutBtn"><span class="material-icons">logout</span>Logout</button>
+			</nav>
 		</div>
 	</header>
 
