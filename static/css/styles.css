@@ -38,16 +38,19 @@ header {
 	box-shadow: var(--shadow);
 }
 
+
 .wrap {
 	max-width: var(--screen-size);
 	margin: 0 auto;
-	padding: 16px;
+	padding: 12px 16px;
 }
+
 
 .bar {
 	display: flex;
 	align-items: center;
 	gap: 12px;
+	position: relative;
 }
 
 .bar h1 {
@@ -56,9 +59,15 @@ header {
 	letter-spacing: .4px
 }
 
+.muted {
+	color: var(--muted);
+	font-size: 14px;
+}
+
 .spacer {
 	flex: 1
 }
+
 
 button,
 .btn {
@@ -72,7 +81,16 @@ button,
 	cursor: pointer;
 	box-shadow: var(--shadow);
 	transition: transform .05s ease, filter .2s ease;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
 }
+
+button .material-icons {
+	font-size: 20px;
+	line-height: 1;
+}
+
 
 button.secondary {
 	background: #2a304a;
@@ -93,6 +111,71 @@ button.danger {
 
 button:active {
 	transform: translateY(1px);
+}
+
+
+/* Navigation actions container */
+#navActions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+
+/* Hamburger toggle (hidden on desktop) */
+#navToggle {
+	display: none;
+	/* shown on small screens */
+	background: transparent;
+	color: var(--text);
+	border: 1px solid rgba(255, 255, 255, .14);
+}
+
+
+/* Mobile styles */
+@media (max-width: 768px) {
+	.muted {
+		display: none;
+	}
+
+	.bar {
+		padding-right: 48px;
+	}
+
+	#navToggle {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+
+	/* Convert actions into a dropdown panel */
+	#navActions {
+		position: absolute;
+		top: calc(100% + 8px);
+		right: 16px;
+		left: 16px;
+		background: var(--panel);
+		border: 1px solid rgba(255, 255, 255, .08);
+		border-radius: var(--radius);
+		padding: 12px;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 10px;
+		display: none;
+		/* hidden until opened */
+		box-shadow: var(--shadow);
+	}
+
+	#navActions.open {
+		display: flex;
+	}
+
+	#navActions button,
+	#navActions .btn {
+		width: 100%;
+		justify-content: center;
+	}
 }
 
 .grid {
