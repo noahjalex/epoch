@@ -416,18 +416,18 @@ function renderOverview() {
 	const h = getHabit(activeHabitId);
 	if (!h) { activeHabitTitle.textContent = 'Overview'; activeHabitMeta.textContent = 'Select a habit'; todayProgress.style.width = '0%'; todaySummary.textContent = 'Today: –'; drawEmpty(barChart); drawEmpty(lineChart); return }
 	activeHabitTitle.textContent = h.name;
-	activeHabitMeta.textContent = `${h.goal ? `Daily goal: ${fmt(h.goal)} ${humanUnit(h.unit)}` : 'No daily goal'} · Unit: ${humanUnit(h.unit)}`;
+	activeHabitMeta.textContent = `${h.goal ? `Daily goal: ${fmt(h.goal)} ${humanUnit(h.unit)}` : 'No daily goal'}`;
 	const todayTotal = sumToday(h.id);
 	const pct = h.goal ? Math.min(100, (todayTotal / h.goal) * 100) : 0;
 	todayProgress.style.width = pct + '%';
 	todaySummary.textContent = `Today: ${fmt(todayTotal)} ${humanUnit(h.unit)}${h.goal ? ` (${Math.round(pct)}% of goal)` : ''}`;
 
 	const { labels, values } = totalsByDate(h.id, 30);
-	drawBar(barChart, labels, values, `${h.name} — last 30 days (${humanUnit(h.unit)})`);
+	drawBar(barChart, labels, values, `last 30 days (${humanUnit(h.unit)})`);
 
 	// cumulative line
 	const cum = values.reduce((arr, v) => { arr.push((arr.at(-1) || 0) + v); return arr }, []);
-	drawLine(lineChart, labels, cum, `${h.name} — cumulative (${humanUnit(h.unit)})`);
+	drawLine(lineChart, labels, cum, `cumulative (${humanUnit(h.unit)})`);
 }
 
 function renderLogs() {
@@ -470,7 +470,7 @@ function scaleData(values, h) { const max = Math.max(1, ...values); const pad = 
 
 function drawAxes(ctx, w, h, title) {
 	ctx.clearRect(0, 0, w, h);
-	ctx.fillStyle = '#c7d2fe'; ctx.font = '16px system-ui'; ctx.textAlign = 'left'; ctx.fillText(title, 16, 26);
+	ctx.fillStyle = '#c7d2fe'; ctx.font = '2rem system-ui'; ctx.textAlign = 'left'; ctx.fillText(title, 16, 26);
 	ctx.strokeStyle = 'rgba(255,255,255,.12)';
 	ctx.lineWidth = 1; ctx.beginPath();
 	// horizontal grid lines
@@ -494,7 +494,7 @@ function drawBar(canvas, labels, values, title = '') {
 		roundRect(ctx, x, y, wbar, hbar, r); ctx.fill();
 	}
 	// X labels every 5th day
-	ctx.fillStyle = '#8b93a7'; ctx.font = '11px system-ui'; ctx.textAlign = 'center';
+	ctx.fillStyle = '#8b93a7'; ctx.font = '1rem system-ui'; ctx.textAlign = 'center';
 	for (let i = 0; i < N; i += 5) { const x = 20 + i * (bw + gap) + bw / 2; ctx.fillText(labels[i].slice(5), x, h - 6) }
 }
 
@@ -517,7 +517,7 @@ function drawLine(canvas, labels, values, title = '') {
 		ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
 	}
 	// X labels every 5th day
-	ctx.fillStyle = '#8b93a7'; ctx.font = '11px system-ui'; ctx.textAlign = 'center';
+	ctx.fillStyle = '#8b93a7'; ctx.font = '1rem system-ui'; ctx.textAlign = 'center';
 	for (let i = 0; i < N; i += 5) { const x = baseX + (chartW) * (i / (N - 1)); ctx.fillText(labels[i].slice(5), x, h - 6) }
 }
 
