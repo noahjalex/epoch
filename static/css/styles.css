@@ -304,6 +304,46 @@ th {
 	letter-spacing: .5px
 }
 
+#logsTable td:last-child {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 8px;
+	white-space: nowrap;
+	padding-top: 8px;
+	padding-bottom: 8px;
+}
+
+#logsTable td:last-child button,
+#logsTable td:last-child .btn {
+	line-height: 1;
+	padding: 8px 12px;
+	height: 36px;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+#logsTable td,
+#logsTable th {
+	vertical-align: middle;
+}
+
+@media (max-width: 480px) {
+	#logsTable td:last-child {
+		flex-wrap: wrap;
+		row-gap: 8px;
+		white-space: normal;
+	}
+
+	#logsTable td:last-child button,
+	#logsTable td:last-child .btn {
+		height: 34px;
+		padding: 8px 10px;
+		font-size: 12px;
+	}
+}
+
 .charts {
 	display: grid;
 	grid-template-columns: 1fr;
