@@ -24,7 +24,9 @@ body {
 body {
 	margin: 0;
 	font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-	background: radial-gradient(var(--screen-size) 800px at 80% -10%, #1b2140 0%, transparent 60%), var(--bg);
+	background: radial-gradient(var(--screen-size) 800px at 80% -10%, #1b2140 0%, #0f122000 60%, #0f122000 100%), var(--bg);
+	background-repeat: no-repeat;
+	background-attachment: fixed;
 	color: var(--text);
 }
 
@@ -401,7 +403,8 @@ select.error:focus {
 	align-items: center;
 	justify-content: center;
 	padding: 20px;
-	background: radial-gradient(var(--screen-size) 800px at 50% -10%, #1b2140 0%, transparent 60%), var(--bg);
+	background: radial-gradient(var(--screen-size) 800px at 50% -10%, #1b2140 0%, #0f122000 60%, #0f122000 100%), var(--bg);
+	background-repeat: no-repeat;
 }
 
 /* Auth card */
