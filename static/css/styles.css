@@ -40,6 +40,11 @@ header {
 	box-shadow: var(--shadow);
 }
 
+#epoch-logo {
+	margin-left: 15px;
+	width: 150px;
+}
+
 
 .wrap {
 	max-width: var(--screen-size);
